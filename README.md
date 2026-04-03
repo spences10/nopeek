@@ -3,10 +3,46 @@
 CLI for Claude Code secret safety. Secure proxy between Claude Code
 and your secrets — Claude knows key _names_, never key _values_.
 
+## Quick Start
+
+Tell Claude to load secrets from your `.env` file:
+
+> "Use npx nopeek to load ANTHROPIC_API_KEY from .env and curl the API
+> to check it works"
+
+Claude runs `npx nopeek load .env --only ANTHROPIC_API_KEY`, gets back
+the key name only, then uses `$ANTHROPIC_API_KEY` in commands without
+ever seeing the value.
+
+## How It Works
+
+```
+You: "load the DATABASE_URL from .env and run a query"
+
+Claude runs:  npx nopeek load .env --only DATABASE_URL
+nopeek:       writes value to secure temp file
+              prints: source /tmp/nopeek/env-abc123.sh
+Claude runs:  source /tmp/nopeek/env-abc123.sh
+Claude runs:  psql $DATABASE_URL -c "SELECT count(*) FROM users"
+```
+
+The secret value never appears in the conversation, Anthropic's API,
+or local transcripts. Claude only sees the variable name.
+
+Three modes depending on environment:
+
+| Context                              | What happens                                  |
+| ------------------------------------ | --------------------------------------------- |
+| Claude Code (with `CLAUDE_ENV_FILE`) | Writes directly to env file — most secure     |
+| Claude Code (without hook)           | Writes to temp file, outputs `source` command |
+| Regular shell                        | Prints `export` statements for `eval`         |
+
 ## Install
 
 ```bash
-npx nopeek
+npx nopeek            # run directly
+pnpx nopeek           # or with pnpm
+npm install -g nopeek # or install globally
 ```
 
 ## Commands
@@ -14,27 +50,25 @@ npx nopeek
 ### `load` — Load secrets from .env files
 
 ```bash
-# Load all keys from .env into the session
 npx nopeek load .env
-
-# Load specific keys only
 npx nopeek load .env --only DATABASE_URL,API_KEY
+npx nopeek load .env --persist  # also save to config for future sessions
 ```
 
-Inside a Claude Code session, values are injected via
-`CLAUDE_ENV_FILE` — they never appear in conversation context or
-transcripts. Outside Claude Code, prints eval-able `export` statements
-to stdout.
+The `--persist` flag saves keys to `~/.config/nopeek/config.json` so a
+SessionStart hook can auto-inject them on future sessions.
 
-### `set` — Store arbitrary keys
+### `set` — Store a secret key
 
 ```bash
-npx nopeek set MY_API_KEY --from-env    # reads from current shell env
-npx nopeek set MY_API_KEY --value "abc" # inline (for scripting)
-npx nopeek set MY_API_KEY               # interactive prompt (TTY only)
+npx nopeek set MY_API_KEY --from-env  # read from current shell env
+npx nopeek set MY_API_KEY             # interactive prompt (TTY only)
 ```
 
 Stores to `~/.config/nopeek/config.json` with `0600` permissions.
+
+> **Note:** Avoid `--value` inside Claude Code — the value would
+> appear in the conversation. Use `--from-env` instead.
 
 ### `list` — Show available keys
 
@@ -56,8 +90,8 @@ npx nopeek remove MY_API_KEY
 npx nopeek init
 ```
 
-Detects installed cloud CLIs (aws, hcloud), checks their auth
-configuration, and stores profile mappings. Currently supports:
+Detects installed cloud CLIs, checks their auth configuration, and
+stores profile mappings.
 
 | CLI      | Safe pattern                      | Detection                       |
 | -------- | --------------------------------- | ------------------------------- |
@@ -83,28 +117,23 @@ Scans for `.env` files and reports secrets found using pattern
 matching (AWS keys, bearer tokens, API keys, private keys, connection
 strings, etc.). Checks `.gitignore` coverage.
 
-## How it works
+## Security
 
-1. **Claude asks nopeek for secrets** — runs `npx nopeek load .env`
-2. **nopeek reads the file** — parses keys and values
-3. **Values go to `CLAUDE_ENV_FILE`** — available as env vars in
-   subsequent commands
-4. **Only key names go to stdout** — Claude never sees the values
-
-This means secrets never appear in:
-
-- Anthropic's API (conversation context)
-- Local transcript files
-- Terminal scrollback (within Claude Code)
+- **Key name validation** — env key names are validated against
+  `^[a-zA-Z_][a-zA-Z0-9_]*$` to prevent shell injection
+- **Secure file permissions** — config dir is `0700`, config file is
+  `0600`, temp env files are `0600`
+- **Atomic writes** — config is written via temp file + rename to
+  prevent corruption
+- **No values in stdout** — inside Claude Code, values are written to
+  temp files, only `source` path or key names reach stdout
 
 ## Limitations
 
-- **Pattern-based secret detection is best-effort.** The audit and
-  redaction patterns catch known formats but can't catch every
-  possible secret.
-- **`CLAUDE_ENV_FILE` values exist on disk briefly.** The file is
-  session-scoped and cleaned up, but values are written to a temp
-  file.
+- **Pattern-based secret detection is best-effort.** The audit
+  patterns catch known formats but can't catch every possible secret.
+- **Temp files exist on disk briefly.** Written to `/tmp/nopeek/` with
+  `0600` perms, but values are on disk until the file is cleaned up.
 - **No output redaction yet.** Redaction hooks will be available via
   [claude-code-toolkit](https://github.com/spences10/claude-code-toolkit).
 
