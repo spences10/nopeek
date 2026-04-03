@@ -1,6 +1,6 @@
 {
 	"name": "nopeek",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"description": "CLI for Claude Code secret safety — secure proxy between Claude Code and your secrets",
 	"keywords": [
 		"claude",

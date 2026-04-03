@@ -1,5 +1,11 @@
 # nopeek
 
+## 0.0.5
+
+### Patch Changes
+
+- cba6568: Add shields.io badges, npm metadata for repository, homepage, author, and files.
+
 ## 0.0.4
 
 ### Patch Changes
