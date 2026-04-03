@@ -7,6 +7,6 @@ export default defineCommand({
 		description: 'Show current nopeek configuration state',
 	},
 	run() {
-		status_command();
+		void status_command();
 	},
 });

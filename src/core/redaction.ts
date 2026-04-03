@@ -15,11 +15,11 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 	},
 	{
 		name: 'Bearer Token',
-		pattern: /Bearer\s+[a-zA-Z0-9._\-]{20,}/,
+		pattern: /Bearer\s+[a-zA-Z0-9._-]{20,}/,
 	},
 	{
 		name: 'OpenAI/Anthropic API Key',
-		pattern: /sk-[a-zA-Z0-9]{20,}/,
+		pattern: /sk-[a-zA-Z0-9._-]{20,}/,
 	},
 	{
 		name: 'Stripe Live Key',

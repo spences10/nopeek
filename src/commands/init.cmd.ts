@@ -7,6 +7,6 @@ export default defineCommand({
 		description: 'Scan for cloud CLIs and configure secure auth',
 	},
 	run() {
-		init_command();
+		void init_command();
 	},
 });
