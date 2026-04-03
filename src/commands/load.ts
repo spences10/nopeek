@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { read_config, write_config } from '../core/config.js';
 import { parse_env_file } from '../core/env-file.js';
 import {
 	has_claude_env_file,
@@ -9,7 +10,11 @@ import {
 } from '../core/session.js';
 import { error, info, success } from '../utils/output.js';
 
-export function load_command(file: string, only?: string): void {
+export function load_command(
+	file: string,
+	only?: string,
+	persist?: boolean,
+): void {
 	if (!existsSync(file)) {
 		error(`File not found: ${file}`);
 		process.exit(1);
@@ -34,8 +39,16 @@ export function load_command(file: string, only?: string): void {
 		process.exit(1);
 	}
 
+	// Persist to config if requested
+	if (persist) {
+		const config = read_config();
+		for (const { key, value } of selected) {
+			config.keys[key] = { value, source: 'load' };
+		}
+		write_config(config);
+	}
+
 	if (has_claude_env_file()) {
-		// Best case: CLAUDE_ENV_FILE exists (hook-based setup)
 		for (const { key, value } of selected) {
 			inject_env(key, value);
 		}
@@ -45,19 +58,14 @@ export function load_command(file: string, only?: string): void {
 		}
 		success('Keys are now available as environment variables.');
 	} else if (is_claude_code()) {
-		// Inside Claude Code but no CLAUDE_ENV_FILE
-		// Write to temp file, print source command only
 		const path = write_nopeek_env(selected);
-		// stdout: only the source command (Claude runs this)
 		console.log(`source ${path}`);
-		// stderr: key names for Claude to see
 		info(`Loaded ${selected.length} keys from ${file}:`);
 		for (const { key } of selected) {
 			info(`  ${key}`);
 		}
 		success('Run the source command above to load into session.');
 	} else {
-		// Outside Claude Code — print eval-able exports
 		for (const { key, value } of selected) {
 			console.log(`export ${key}=${shell_escape(value)}`);
 		}
@@ -65,5 +73,11 @@ export function load_command(file: string, only?: string): void {
 		for (const { key } of selected) {
 			info(`  ${key}`);
 		}
+	}
+
+	if (persist) {
+		success(
+			`${selected.length} key(s) saved to nopeek config for future sessions.`,
+		);
 	}
 }

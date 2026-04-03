@@ -49,6 +49,23 @@ describe('detect_secrets', () => {
 		).toBe(true);
 	});
 
+	it('detects hetzner tokens with context', () => {
+		const hex64 = 'a'.repeat(64);
+		const hits = detect_secrets(`HCLOUD_TOKEN=${hex64}`);
+		expect(hits.some((h) => h.pattern.name === 'Hetzner Token')).toBe(
+			true,
+		);
+	});
+
+	it('does not false-positive on bare SHA256 hashes', () => {
+		const sha =
+			'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+		const hits = detect_secrets(`integrity: ${sha}`);
+		expect(hits.some((h) => h.pattern.name === 'Hetzner Token')).toBe(
+			false,
+		);
+	});
+
 	it('returns empty for clean content', () => {
 		const hits = detect_secrets(
 			'NODE_ENV=production\nPORT=3000\nDEBUG=false',

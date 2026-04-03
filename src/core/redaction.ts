@@ -31,7 +31,8 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 	},
 	{
 		name: 'Hetzner Token',
-		pattern: /[a-f0-9]{64}/,
+		pattern:
+			/(?:HCLOUD_TOKEN|hcloud_token|token)\s*[:=]\s*["']?[a-f0-9]{64}\b/,
 	},
 	{
 		name: 'Private Key',

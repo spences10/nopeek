@@ -17,8 +17,13 @@ export default defineCommand({
 			description:
 				'Comma-separated list of keys to load (default: all)',
 		},
+		persist: {
+			type: 'boolean',
+			description:
+				'Also save keys to nopeek config for future sessions',
+		},
 	},
 	run({ args }) {
-		load_command(args.file, args.only);
+		load_command(args.file, args.only, args.persist);
 	},
 });
