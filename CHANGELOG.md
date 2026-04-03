@@ -1,5 +1,11 @@
 # nopeek
 
+## 0.0.3
+
+### Patch Changes
+
+- 61a1bcc: Fix Hetzner token false positives, add --persist flag to load for future sessions.
+
 ## 0.0.2
 
 ### Patch Changes
