@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { read_config } from '../core/config.js';
-import { is_claude_session } from '../core/session.js';
+import { is_claude_code } from '../core/session.js';
 import { scan_all } from '../detectors/index.js';
 import { info, label } from '../utils/output.js';
 
@@ -10,7 +10,7 @@ export async function status_command(): Promise<void> {
 	// Session status
 	info(
 		chalk.bold('Session: ') +
-			(is_claude_session()
+			(is_claude_code()
 				? chalk.green('Inside Claude Code')
 				: chalk.dim('Outside Claude Code')),
 	);

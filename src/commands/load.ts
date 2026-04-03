@@ -1,6 +1,11 @@
 import { existsSync } from 'node:fs';
 import { parse_env_file } from '../core/env-file.js';
-import { inject_env, is_claude_session } from '../core/session.js';
+import {
+	has_claude_env_file,
+	inject_env,
+	is_claude_code,
+	write_nopeek_env,
+} from '../core/session.js';
 import { error, info, success } from '../utils/output.js';
 
 export function load_command(file: string, only?: string): void {
@@ -19,35 +24,46 @@ export function load_command(file: string, only?: string): void {
 		? new Set(only.split(',').map((k) => k.trim()))
 		: null;
 
-	const loaded: string[] = [];
+	const selected = entries.filter(
+		({ key }) => !filter || filter.has(key),
+	);
 
-	for (const { key, value } of entries) {
-		if (filter && !filter.has(key)) continue;
-
-		if (is_claude_session()) {
-			inject_env(key, value);
-		} else {
-			// Outside Claude Code — print eval-able exports to stdout
-			console.log(`export ${key}=${shell_escape(value)}`);
-		}
-		loaded.push(key);
-	}
-
-	if (loaded.length === 0) {
+	if (selected.length === 0) {
 		error('No matching keys found');
 		process.exit(1);
 	}
 
-	// Key names go to stderr so Claude sees them but not values
-	info(`Loaded ${loaded.length} keys from ${file}:`);
-	for (const key of loaded) {
-		info(`  ${key}`);
-	}
-
-	if (is_claude_session()) {
-		success(
-			'Keys are now available as environment variables in this session.',
-		);
+	if (has_claude_env_file()) {
+		// Best case: CLAUDE_ENV_FILE exists (hook-based setup)
+		for (const { key, value } of selected) {
+			inject_env(key, value);
+		}
+		info(`Loaded ${selected.length} keys from ${file}:`);
+		for (const { key } of selected) {
+			info(`  ${key}`);
+		}
+		success('Keys are now available as environment variables.');
+	} else if (is_claude_code()) {
+		// Inside Claude Code but no CLAUDE_ENV_FILE
+		// Write to temp file, print source command only
+		const path = write_nopeek_env(selected);
+		// stdout: only the source command (Claude runs this)
+		console.log(`source ${path}`);
+		// stderr: key names for Claude to see
+		info(`Loaded ${selected.length} keys from ${file}:`);
+		for (const { key } of selected) {
+			info(`  ${key}`);
+		}
+		success('Run the source command above to load into session.');
+	} else {
+		// Outside Claude Code — print eval-able exports
+		for (const { key, value } of selected) {
+			console.log(`export ${key}=${shell_escape(value)}`);
+		}
+		info(`Loaded ${selected.length} keys from ${file}:`);
+		for (const { key } of selected) {
+			info(`  ${key}`);
+		}
 	}
 }
 
