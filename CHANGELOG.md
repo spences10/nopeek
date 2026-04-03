@@ -4,7 +4,8 @@
 
 ### Patch Changes
 
-- d20a582: Rewrite README with Claude Code workflow examples, security section, and persist flag docs.
+- d20a582: Rewrite README with Claude Code workflow examples, security
+  section, and persist flag docs.
 
 ## 0.0.3
 

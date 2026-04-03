@@ -11,11 +11,23 @@
 		"secrets",
 		"security"
 	],
+	"homepage": "https://github.com/spences10/nopeek#readme",
+	"bugs": {
+		"url": "https://github.com/spences10/nopeek/issues"
+	},
 	"license": "MIT",
-	"author": "",
+	"author": "Scott Spence <spences10apps@gmail.com>",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/spences10/nopeek.git"
+	},
 	"bin": {
 		"nopeek": "./dist/index.js"
 	},
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"type": "module",
 	"main": "./dist/index.js",
 	"scripts": {
