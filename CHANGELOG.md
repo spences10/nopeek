@@ -1,5 +1,13 @@
 # nopeek
 
+## 0.0.2
+
+### Patch Changes
+
+- 1d4d2fa: Add key name validation to prevent shell injection, secure config directory permissions.
+- 23ab334: Add secure temp file loading for Claude Code sessions without CLAUDE_ENV_FILE hook.
+- 1519297: Migrate to Vite+ for build, format, lint, type-check, and add tests with Vitest.
+
 ## 0.0.1
 
 ### Patch Changes
