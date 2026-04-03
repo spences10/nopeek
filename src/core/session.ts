@@ -13,7 +13,14 @@ export function is_claude_code(): boolean {
 	);
 }
 
+export function validate_key(key: string): boolean {
+	return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key);
+}
+
 export function inject_env(key: string, value: string): void {
+	if (!validate_key(key)) {
+		throw new Error(`Invalid env key: ${key}`);
+	}
 	const env_file = process.env.CLAUDE_ENV_FILE;
 	if (env_file) {
 		appendFileSync(
@@ -26,6 +33,11 @@ export function inject_env(key: string, value: string): void {
 export function write_nopeek_env(
 	exports: { key: string; value: string }[],
 ): string {
+	for (const { key } of exports) {
+		if (!validate_key(key)) {
+			throw new Error(`Invalid env key: ${key}`);
+		}
+	}
 	const dir = join(tmpdir(), 'nopeek');
 	mkdirSync(dir, { recursive: true, mode: 0o700 });
 	const path = join(dir, `env-${randomBytes(4).toString('hex')}.sh`);
@@ -39,7 +51,7 @@ export function write_nopeek_env(
 	return path;
 }
 
-function shell_escape(value: string): string {
+export function shell_escape(value: string): string {
 	if (!/[^a-zA-Z0-9_./:@=-]/.test(value)) return value;
 	return `'${value.replace(/'/g, "'\\''")}'`;
 }

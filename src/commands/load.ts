@@ -4,6 +4,7 @@ import {
 	has_claude_env_file,
 	inject_env,
 	is_claude_code,
+	shell_escape,
 	write_nopeek_env,
 } from '../core/session.js';
 import { error, info, success } from '../utils/output.js';
@@ -65,9 +66,4 @@ export function load_command(file: string, only?: string): void {
 			info(`  ${key}`);
 		}
 	}
-}
-
-function shell_escape(value: string): string {
-	if (!/[^a-zA-Z0-9_./:@=-]/.test(value)) return value;
-	return `'${value.replace(/'/g, "'\\''")}'`;
 }

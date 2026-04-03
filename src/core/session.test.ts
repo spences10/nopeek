@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
 	has_claude_env_file,
 	is_claude_code,
+	validate_key,
 	write_nopeek_env,
 } from './session.js';
 
@@ -64,6 +65,26 @@ describe('is_claude_code', () => {
 	});
 });
 
+describe('validate_key', () => {
+	it('accepts valid env key names', () => {
+		expect(validate_key('FOO')).toBe(true);
+		expect(validate_key('MY_API_KEY')).toBe(true);
+		expect(validate_key('_private')).toBe(true);
+		expect(validate_key('a123')).toBe(true);
+	});
+
+	it('rejects invalid env key names', () => {
+		expect(validate_key('')).toBe(false);
+		expect(validate_key('123_BAD')).toBe(false);
+		expect(validate_key('KEY WITH SPACES')).toBe(false);
+		expect(validate_key('KEY;rm -rf /')).toBe(false);
+		expect(validate_key('KEY=value')).toBe(false);
+		expect(validate_key("KEY'")).toBe(false);
+		expect(validate_key('KEY"')).toBe(false);
+		expect(validate_key('KEY\nNEWLINE')).toBe(false);
+	});
+});
+
 describe('write_nopeek_env', () => {
 	it('writes exports to a temp file with 0600 perms', () => {
 		const path = write_nopeek_env([
@@ -75,6 +96,15 @@ describe('write_nopeek_env', () => {
 		expect(content).toContain('export FOO=bar');
 		expect(content).toContain("export BAZ='hello world'");
 		rmSync(path);
+	});
+
+	it('rejects invalid key names', () => {
+		expect(() =>
+			write_nopeek_env([
+				{ key: 'VALID', value: 'ok' },
+				{ key: '; rm -rf /', value: 'bad' },
+			]),
+		).toThrow('Invalid env key');
 	});
 
 	it('shell-escapes special characters', () => {
