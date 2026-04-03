@@ -1,0 +1,44 @@
+{
+	"name": "nopeek",
+	"version": "0.0.1",
+	"description": "CLI for Claude Code secret safety — secure proxy between Claude Code and your secrets",
+	"type": "module",
+	"main": "./dist/index.js",
+	"bin": {
+		"nopeek": "./dist/index.js"
+	},
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"start": "node ./dist/index.js",
+		"format": "prettier --write .",
+		"format:check": "prettier --check .",
+		"changeset": "changeset",
+		"version": "changeset version",
+		"release": "pnpm run build && changeset publish"
+	},
+	"keywords": [
+		"claude",
+		"claude-code",
+		"secrets",
+		"security",
+		"env",
+		"redaction",
+		"cli"
+	],
+	"author": "",
+	"license": "MIT",
+	"dependencies": {
+		"chalk": "^5.4.1",
+		"citty": "^0.2.1"
+	},
+	"devDependencies": {
+		"@changesets/cli": "^2.30.0",
+		"@types/node": "^25.5.0",
+		"prettier": "^3.8.1",
+		"typescript": "^5.9.3"
+	}
+}
