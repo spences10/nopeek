@@ -4,7 +4,7 @@
 [![tested with vitest](https://img.shields.io/badge/tested%20with-Vitest-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev)
 
 CLI for Claude Code secret safety. Secure proxy between Claude Code
-and your secrets — Claude knows key _names_, never key _values_.
+and your secrets. Claude knows key _names_, not key _values_.
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ In a Claude Code session, tell Claude to use nopeek:
 ```
 
 Claude runs the command, gets back only the key name, and uses the
-variable in subsequent commands — never seeing the actual value.
+variable in subsequent commands, not seeing the actual value.
 
 ## How It Works
 
@@ -27,52 +27,58 @@ Every Bash command output in Claude Code is sent to Anthropic's API
 and retained for up to 30 days (or longer depending on your account).
 nopeek prevents secrets from appearing in that output.
 
-**Step 1** — You run `npx nopeek load` in your Claude Code session
-(either yourself or by telling Claude the exact command to run):
+**Step 1.** Tell Claude to use nopeek. It just needs to run the
+command, it will self-discover subcommands and flags from the CLI
+output:
 
 ```bash
 npx nopeek load .env --only DATABASE_URL
 ```
 
-**Step 2** — nopeek injects the value into the session environment and
+**Step 2.** nopeek injects the value into the session environment and
 prints only the key name:
 
 ```
 Loaded 1 key from .env: DATABASE_URL
 ```
 
-**Step 3** — Claude can now use the variable by name without ever
+**Step 3.** Claude can now use the variable by name without ever
 seeing the value:
 
 ```bash
 psql $DATABASE_URL -c "SELECT count(*) FROM users"
 ```
 
-> **Important:** Claude doesn't know about nopeek unless you tell it.
-> You need to explicitly say something like _"run
-> `npx nopeek load .env --only DATABASE_URL` then use `$DATABASE_URL`
-> to query the database"_ — don't just say "load the DATABASE_URL and
-> run a query" and expect Claude to figure it out.
+> **Important:** Claude doesn't know about nopeek unless you mention
+> it. You don't need to spell out the full command, just mention
+> `{npx,pnpx,bunx} nopeek` and Claude will figure out the rest.
 
 Three modes depending on environment:
 
 | Context                              | What happens                                  |
 | ------------------------------------ | --------------------------------------------- |
-| Claude Code (with `CLAUDE_ENV_FILE`) | Writes directly to env file — most secure     |
+| Claude Code (with `CLAUDE_ENV_FILE`) | Writes directly to env file, most secure      |
 | Claude Code (without hook)           | Writes to temp file, outputs `source` command |
 | Regular shell                        | Prints `export` statements for `eval`         |
 
-## Install
+## Usage
+
+No install needed. Claude runs it directly via `npx`:
 
 ```bash
-npx nopeek            # run directly
-pnpx nopeek           # or with pnpm
-npm install -g nopeek # or install globally
+npx nopeek load .env
+npx nopeek load .env --only DATABASE_URL
+npx nopeek set MY_API_KEY --from-env
+npx nopeek status
 ```
+
+All commands are designed to be run inside a Claude Code session. Just
+mention `nopeek` in your prompt. Claude will discover the right
+subcommand from the CLI output.
 
 ## Commands
 
-### `load` — Load secrets from .env files
+### `load` - Load secrets from .env files
 
 ```bash
 npx nopeek load .env
@@ -83,7 +89,7 @@ npx nopeek load .env --persist  # also save to config for future sessions
 The `--persist` flag saves keys to `~/.config/nopeek/config.json` so a
 SessionStart hook can auto-inject them on future sessions.
 
-### `set` — Store a secret key
+### `set` - Store a secret key
 
 ```bash
 npx nopeek set MY_API_KEY --from-env  # read from current shell env
@@ -92,10 +98,10 @@ npx nopeek set MY_API_KEY             # interactive prompt (TTY only)
 
 Stores to `~/.config/nopeek/config.json` with `0600` permissions.
 
-> **Note:** Avoid `--value` inside Claude Code — the value would
-> appear in the conversation. Use `--from-env` instead.
+> **Note:** Avoid `--value` inside Claude Code. The value would appear
+> in the conversation. Use `--from-env` instead.
 
-### `list` — Show available keys
+### `list` - Show available keys
 
 ```bash
 npx nopeek list
@@ -103,13 +109,13 @@ npx nopeek list
 
 Shows key names and sources without values.
 
-### `remove` — Remove a stored key
+### `remove` - Remove a stored key
 
 ```bash
 npx nopeek remove MY_API_KEY
 ```
 
-### `init` — Scan and configure cloud CLIs
+### `init` - Scan and configure cloud CLIs
 
 ```bash
 npx nopeek init
@@ -123,7 +129,7 @@ stores profile mappings.
 | `aws`    | Named profiles (`AWS_PROFILE`)    | `~/.aws/credentials` + env vars |
 | `hcloud` | Named contexts (`HCLOUD_CONTEXT`) | `~/.config/hcloud/cli.toml`     |
 
-### `status` — Show current state
+### `status` - Show current state
 
 ```bash
 npx nopeek status
@@ -131,7 +137,7 @@ npx nopeek status
 
 Shows session type, stored keys, CLI profiles, and detected CLIs.
 
-### `audit` — Scan for exposed secrets
+### `audit` - Scan for exposed secrets
 
 ```bash
 npx nopeek audit
@@ -144,13 +150,13 @@ strings, etc.). Checks `.gitignore` coverage.
 
 ## Security
 
-- **Key name validation** — env key names are validated against
+- **Key name validation** - env key names are validated against
   `^[a-zA-Z_][a-zA-Z0-9_]*$` to prevent shell injection
-- **Secure file permissions** — config dir is `0700`, config file is
+- **Secure file permissions** - config dir is `0700`, config file is
   `0600`, temp env files are `0600`
-- **Atomic writes** — config is written via temp file + rename to
+- **Atomic writes** - config is written via temp file + rename to
   prevent corruption
-- **No values in stdout** — inside Claude Code, values are written to
+- **No values in stdout** - inside Claude Code, values are written to
   temp files, only `source` path or key names reach stdout
 
 ## Limitations
