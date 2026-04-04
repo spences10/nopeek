@@ -8,29 +8,51 @@ and your secrets — Claude knows key _names_, never key _values_.
 
 ## Quick Start
 
-Tell Claude to load secrets from your `.env` file:
+In a Claude Code session, tell Claude to use nopeek:
 
-> "Use npx nopeek to load ANTHROPIC_API_KEY from .env and curl the API
-> to check it works"
+```
+"run npx nopeek load .env then use $DATABASE_URL to query the users table"
 
-Claude runs `npx nopeek load .env --only ANTHROPIC_API_KEY`, gets back
-the key name only, then uses `$ANTHROPIC_API_KEY` in commands without
-ever seeing the value.
+"use npx nopeek load .env --only STRIPE_KEY and then curl the billing API"
+
+"run npx nopeek load .env --only API_KEY,API_SECRET and test the auth endpoint"
+```
+
+Claude runs the command, gets back only the key name, and uses the
+variable in subsequent commands — never seeing the actual value.
 
 ## How It Works
 
-```
-You: "load the DATABASE_URL from .env and run a query"
+Every Bash command output in Claude Code is sent to Anthropic's API
+and retained for up to 30 days (or longer depending on your account).
+nopeek prevents secrets from appearing in that output.
 
-Claude runs:  npx nopeek load .env --only DATABASE_URL
-nopeek:       writes value to secure temp file
-              prints: source /tmp/nopeek/env-abc123.sh
-Claude runs:  source /tmp/nopeek/env-abc123.sh
-Claude runs:  psql $DATABASE_URL -c "SELECT count(*) FROM users"
+**Step 1** — You run `npx nopeek load` in your Claude Code session
+(either yourself or by telling Claude the exact command to run):
+
+```bash
+npx nopeek load .env --only DATABASE_URL
 ```
 
-The secret value never appears in the conversation, Anthropic's API,
-or local transcripts. Claude only sees the variable name.
+**Step 2** — nopeek injects the value into the session environment and
+prints only the key name:
+
+```
+Loaded 1 key from .env: DATABASE_URL
+```
+
+**Step 3** — Claude can now use the variable by name without ever
+seeing the value:
+
+```bash
+psql $DATABASE_URL -c "SELECT count(*) FROM users"
+```
+
+> **Important:** Claude doesn't know about nopeek unless you tell it.
+> You need to explicitly say something like _"run
+> `npx nopeek load .env --only DATABASE_URL` then use `$DATABASE_URL`
+> to query the database"_ — don't just say "load the DATABASE_URL and
+> run a query" and expect Claude to figure it out.
 
 Three modes depending on environment:
 
