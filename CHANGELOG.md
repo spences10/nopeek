@@ -1,5 +1,11 @@
 # nopeek
 
+## 0.0.6
+
+### Patch Changes
+
+- 996b5ed: Add .tfvars and .tfvars.json support to load command
+
 ## 0.0.5
 
 ### Patch Changes
