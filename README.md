@@ -78,13 +78,26 @@ subcommand from the CLI output.
 
 ## Commands
 
-### `load` - Load secrets from .env files
+### `load` - Load secrets from .env or .tfvars files
 
 ```bash
 npx nopeek load .env
 npx nopeek load .env --only DATABASE_URL,API_KEY
 npx nopeek load .env --persist  # also save to config for future sessions
+npx nopeek load terraform.tfvars --only prod_password
+npx nopeek load production.tfvars.json --only db_password
 ```
+
+Supported formats:
+
+| Extension        | Format                        |
+| ---------------- | ----------------------------- |
+| `.env`, `.env.*` | `KEY=value`                   |
+| `.tfvars`        | `key = "value"` (HCL strings) |
+| `.tfvars.json`   | JSON top-level strings        |
+
+For `.tfvars` files, only top-level quoted string values are loaded.
+Maps, lists, numbers, and booleans are skipped.
 
 The `--persist` flag saves keys to `~/.config/nopeek/config.json` so a
 SessionStart hook can auto-inject them on future sessions.
@@ -158,6 +171,49 @@ strings, etc.). Checks `.gitignore` coverage.
   prevent corruption
 - **No values in stdout** - inside Claude Code, values are written to
   temp files, only `source` path or key names reach stdout
+
+## Recommended Deny Rules
+
+nopeek is the primary defense, but you should also add deny rules to
+your `~/.claude/settings.json` as a safety net. These block Claude
+from reading secret files or embedding credentials inline in commands:
+
+```jsonc
+{
+	"permissions": {
+		"deny": [
+			// Block reading secret files
+			"Read(.env)",
+			"Read(*.env)",
+			"Read(*.tfvars)",
+			"Read(*credentials*)",
+			"Read(*secret*)",
+
+			// Block cat/head on secret files
+			"Bash(cat .env)",
+			"Bash(cat *.env*)",
+			"Bash(cat *tfvars*)",
+			"Bash(cat *credentials*)",
+			"Bash(cat *secret*)",
+
+			// Block inline credentials in commands
+			"Bash(PGPASSWORD*)",
+			"Bash(*HCLOUD_TOKEN*)",
+			"Bash(hcloud context create*)",
+
+			// Block fetching secret values from cloud providers
+			"Bash(*secretsmanager get-secret-value*)",
+			"Bash(*hetzner*secret*)",
+			"Bash(*hetzner*access_key*)",
+		],
+	},
+}
+```
+
+Without these rules, Claude can still read a `.tfvars` or `.env` file
+directly and hardcode the values into a Bash command. nopeek prevents
+secrets from appearing in _output_, but deny rules prevent Claude from
+_reading_ the files in the first place.
 
 ## Limitations
 

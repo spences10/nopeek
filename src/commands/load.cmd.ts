@@ -4,12 +4,13 @@ import { load_command } from './load.js';
 export default defineCommand({
 	meta: {
 		name: 'load',
-		description: 'Load secrets from .env file into session',
+		description:
+			'Load secrets from .env or .tfvars file into session',
 	},
 	args: {
 		file: {
 			type: 'positional',
-			description: '.env file path',
+			description: 'File path (.env, .tfvars, .tfvars.json)',
 			required: true,
 		},
 		only: {

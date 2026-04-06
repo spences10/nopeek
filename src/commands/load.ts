@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { read_config, write_config } from '../core/config.js';
-import { parse_env_file } from '../core/env-file.js';
+import { parse_file } from '../core/env-file.js';
 import {
 	has_claude_env_file,
 	inject_env,
@@ -20,7 +20,7 @@ export function load_command(
 		process.exit(1);
 	}
 
-	const entries = parse_env_file(file);
+	const entries = parse_file(file);
 	if (entries.length === 0) {
 		error(`No keys found in ${file}`);
 		process.exit(1);

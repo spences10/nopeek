@@ -1,8 +1,19 @@
 import { readFileSync } from 'node:fs';
+import {
+	parse_tfvars_file,
+	parse_tfvars_json_file,
+} from './tfvars-file.js';
 
 export interface EnvEntry {
 	key: string;
 	value: string;
+}
+
+export function parse_file(path: string): EnvEntry[] {
+	if (path.endsWith('.tfvars.json'))
+		return parse_tfvars_json_file(path);
+	if (path.endsWith('.tfvars')) return parse_tfvars_file(path);
+	return parse_env_file(path);
 }
 
 export function parse_env_file(path: string): EnvEntry[] {
