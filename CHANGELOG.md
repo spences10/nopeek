@@ -1,5 +1,12 @@
 # nopeek
 
+## 0.0.7
+
+### Patch Changes
+
+- 11eb1cc: Extract string values from nested maps in .tfvars and
+  nested objects in .tfvars.json
+
 ## 0.0.6
 
 ### Patch Changes
