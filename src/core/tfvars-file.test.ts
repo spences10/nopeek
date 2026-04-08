@@ -52,7 +52,7 @@ describe('parse_tfvars_file', () => {
 		expect(entries[0].key).toBe('key');
 	});
 
-	it('skips map/object blocks', () => {
+	it('extracts string values from map/object blocks', () => {
 		const path = tmp_file(
 			'test.tfvars',
 			[
@@ -67,8 +67,41 @@ describe('parse_tfvars_file', () => {
 		const entries = parse_tfvars_file(path);
 		expect(entries).toEqual([
 			{ key: 'password', value: 'secret' },
+			{ key: 'NODE_ENV', value: 'production' },
+			{ key: 'API_KEY', value: 'sk-123' },
 			{ key: 'other_key', value: 'value' },
 		]);
+	});
+
+	it('last-wins when map key conflicts with top-level key', () => {
+		const path = tmp_file(
+			'test.tfvars',
+			[
+				'NODE_ENV = "dev"',
+				'container_env = {',
+				'  NODE_ENV = "production"',
+				'}',
+			].join('\n'),
+		);
+		const entries = parse_tfvars_file(path);
+		const node_envs = entries.filter((e) => e.key === 'NODE_ENV');
+		expect(node_envs).toHaveLength(2);
+		expect(node_envs[1].value).toBe('production');
+	});
+
+	it('skips non-string values inside maps', () => {
+		const path = tmp_file(
+			'test.tfvars',
+			[
+				'config = {',
+				'  port    = 8080',
+				'  enabled = true',
+				'  name    = "my-app"',
+				'}',
+			].join('\n'),
+		);
+		const entries = parse_tfvars_file(path);
+		expect(entries).toEqual([{ key: 'name', value: 'my-app' }]);
 	});
 
 	it('skips list blocks', () => {
@@ -119,7 +152,7 @@ describe('parse_tfvars_file', () => {
 });
 
 describe('parse_tfvars_json_file', () => {
-	it('extracts top-level string values', () => {
+	it('extracts string values from top-level and nested objects', () => {
 		const path = tmp_file(
 			'test.tfvars.json',
 			JSON.stringify({
@@ -127,13 +160,15 @@ describe('parse_tfvars_json_file', () => {
 				api_key: 'sk-abc123',
 				port: 8080,
 				enabled: true,
-				tags: { env: 'prod' },
+				tags: { env: 'prod', region: 'us-east-1' },
 			}),
 		);
 		const entries = parse_tfvars_json_file(path);
 		expect(entries).toEqual([
 			{ key: 'db_password', value: 's3cret' },
 			{ key: 'api_key', value: 'sk-abc123' },
+			{ key: 'env', value: 'prod' },
+			{ key: 'region', value: 'us-east-1' },
 		]);
 	});
 
