@@ -1,5 +1,11 @@
 # nopeek
 
+## 0.0.8
+
+### Patch Changes
+
+- 160762c: Add .env discovery hints to set/status commands and new template command for secret injection
+
 ## 0.0.7
 
 ### Patch Changes
