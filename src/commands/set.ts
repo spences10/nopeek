@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 import { read_config, write_config } from '../core/config.js';
-import { error, success } from '../utils/output.js';
+import { error, info, success } from '../utils/output.js';
 
 interface SetOptions {
 	value?: string;
@@ -12,6 +12,9 @@ export function set_command(key: string, options: SetOptions): void {
 		const val = process.env[key];
 		if (!val) {
 			error(`${key} not found in environment`);
+			info(
+				`  Tip: To load from a .env file, use: npx nopeek load .env --only ${key}`,
+			);
 			process.exit(1);
 		}
 		store_key(key, val);

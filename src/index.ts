@@ -31,6 +31,8 @@ const main = defineCommand({
 			import('./commands/status.cmd.js').then((m) => m.default),
 		audit: () =>
 			import('./commands/audit.cmd.js').then((m) => m.default),
+		template: () =>
+			import('./commands/template.cmd.js').then((m) => m.default),
 	},
 });
 

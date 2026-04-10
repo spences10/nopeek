@@ -1,5 +1,8 @@
 import chalk from 'chalk';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { read_config } from '../core/config.js';
+import { parse_file } from '../core/env-file.js';
 import { is_claude_code } from '../core/session.js';
 import { scan_all } from '../detectors/index.js';
 import { info, label } from '../utils/output.js';
@@ -46,6 +49,41 @@ export async function status_command(): Promise<void> {
 						? chalk.yellow('[MIGRATE]')
 						: chalk.dim('[SKIP]');
 			label(`  ${r.name} v${r.version} ${status_icon}`);
+		}
+	}
+
+	// .env file detection
+	const cwd = process.cwd();
+	const env_files: { name: string; key_count: number }[] = [];
+	try {
+		const files = readdirSync(cwd);
+		for (const f of files) {
+			if (
+				f === '.env' ||
+				(f.startsWith('.env.') && !f.endsWith('.example'))
+			) {
+				try {
+					const entries = parse_file(join(cwd, f));
+					env_files.push({ name: f, key_count: entries.length });
+				} catch {
+					// skip unparseable files
+				}
+			}
+		}
+	} catch {
+		// can't read cwd, skip
+	}
+
+	if (env_files.length > 0) {
+		console.error('');
+		info(chalk.bold(`.env files in ${cwd}:`));
+		for (const { name, key_count } of env_files) {
+			label(
+				`  ${name} (${key_count} key${key_count !== 1 ? 's' : ''})`,
+			);
+		}
+		if (keys.length === 0) {
+			label(chalk.cyan('  Tip: npx nopeek load .env'));
 		}
 	}
 }
