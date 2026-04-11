@@ -6,7 +6,14 @@ export default defineCommand({
 		name: 'init',
 		description: 'Scan for cloud CLIs and configure secure auth',
 	},
-	run() {
-		void init_command();
+	args: {
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
+	},
+	run({ args }) {
+		void init_command(args.json);
 	},
 });

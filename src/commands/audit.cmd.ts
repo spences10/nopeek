@@ -13,8 +13,13 @@ export default defineCommand({
 			description: 'Directory to scan (default: .)',
 			default: '.',
 		},
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
 	},
 	run({ args }) {
-		audit_command(args.path);
+		audit_command(args.path, args.json);
 	},
 });

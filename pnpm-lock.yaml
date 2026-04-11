@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      chalk:
-        specifier: ^5.6.2
-        version: 5.6.2
       citty:
         specifier: ^0.2.2
         version: 0.2.2
@@ -739,10 +736,6 @@ packages:
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
-
-  chalk@5.6.2:
-    resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
-    engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
 
   chardet@2.1.1:
     resolution: {integrity: sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ==}
@@ -1885,8 +1878,6 @@ snapshots:
       fill-range: 7.1.1
 
   chai@6.2.2: {}
-
-  chalk@5.6.2: {}
 
   chardet@2.1.1: {}
 

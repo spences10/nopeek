@@ -6,7 +6,14 @@ export default defineCommand({
 		name: 'status',
 		description: 'Show current nopeek configuration state',
 	},
-	run() {
-		void status_command();
+	args: {
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
+	},
+	run({ args }) {
+		void status_command(args.json);
 	},
 });

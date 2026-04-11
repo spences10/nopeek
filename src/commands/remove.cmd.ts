@@ -12,8 +12,13 @@ export default defineCommand({
 			description: 'Key name to remove',
 			required: true,
 		},
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
 	},
 	run({ args }) {
-		remove_command(args.key);
+		remove_command(args.key, args.json);
 	},
 });

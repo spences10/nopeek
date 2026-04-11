@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { defineCommand, runMain } from 'citty';
+import { defineCommand, renderUsage, runMain } from 'citty';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,30 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
 	readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'),
 );
+
+const WORKFLOW_SECTION = `Workflow:
+  1. npx nopeek init          Detect cloud CLIs, configure profiles
+  2. npx nopeek load .env     Inject .env secrets into session
+  3. npx nopeek status        Verify session state and loaded keys
+  4. npx nopeek audit         Scan for exposed secrets`;
+
+const CONCEPTS_SECTION = `Concepts:
+  Key       A secret name (e.g. DATABASE_URL). Values never appear in output.
+  Source    Where the key came from: "set" (manual), "load" (from file).
+  Profile   A named CLI auth config (e.g. AWS_PROFILE) — no inline creds.
+  Session   Claude Code session detected via CLAUDE_ENV_FILE or CLAUDECODE.`;
+
+const EXAMPLES_SECTION = `Examples:
+  npx nopeek load .env --only DATABASE_URL,API_KEY
+  npx nopeek set STRIPE_KEY --from-env
+  npx nopeek list
+  npx nopeek status
+  npx nopeek audit
+  npx nopeek init
+
+  All commands output JSON by default (for LLM agents).
+  Use --no-json for human-readable text output.
+  Interactive prompts are skipped in non-TTY environments.`;
 
 const main = defineCommand({
 	meta: {
@@ -36,4 +60,20 @@ const main = defineCommand({
 	},
 });
 
-void runMain(main);
+// Non-TTY with no subcommand: auto-show help with workflow guidance
+const arg = process.argv[2];
+if (!arg && !process.stdout.isTTY) {
+	const base = await renderUsage(main);
+	console.log(
+		base +
+			'\n' +
+			WORKFLOW_SECTION +
+			'\n\n' +
+			CONCEPTS_SECTION +
+			'\n\n' +
+			EXAMPLES_SECTION +
+			'\n',
+	);
+} else {
+	void runMain(main);
+}

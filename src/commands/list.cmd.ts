@@ -6,7 +6,14 @@ export default defineCommand({
 		name: 'list',
 		description: 'List available keys (without values)',
 	},
-	run() {
-		list_command();
+	args: {
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
+	},
+	run({ args }) {
+		list_command(args.json);
 	},
 });

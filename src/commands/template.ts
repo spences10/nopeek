@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { read_config } from '../core/config.js';
 import { write_secure } from '../utils/fs.js';
-import { error, info, success, warning } from '../utils/output.js';
+import {
+	fail,
+	info,
+	output,
+	success,
+	warning,
+} from '../utils/output.js';
 
 const PLACEHOLDER_RE = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
 
@@ -15,11 +21,11 @@ function resolve_value(key: string): string | undefined {
 
 export function template_command(
 	input: string,
-	output: string,
+	output_path: string,
+	json?: boolean,
 ): void {
 	if (!existsSync(input)) {
-		error(`File not found: ${input}`);
-		process.exit(1);
+		fail(`File not found: ${input}`, json);
 	}
 
 	const content = readFileSync(input, 'utf-8');
@@ -31,8 +37,11 @@ export function template_command(
 	}
 
 	if (keys.size === 0) {
-		warning(`No {{KEY}} placeholders found in ${input}`);
-		process.exit(1);
+		if (!json) {
+			warning(`No {{KEY}} placeholders found in ${input}`);
+			process.exit(1);
+		}
+		fail(`No {{KEY}} placeholders found in ${input}`, json);
 	}
 
 	// Resolve all keys, track missing
@@ -49,11 +58,14 @@ export function template_command(
 	}
 
 	if (missing.length > 0) {
-		error(`Missing keys: ${missing.join(', ')}`);
-		info(
-			'  Load them first with: npx nopeek load .env or npx nopeek set <KEY>',
-		);
-		process.exit(1);
+		if (!json) {
+			info(
+				'  Load them first with: npx nopeek load .env or npx nopeek set <KEY>',
+			);
+		}
+		fail(`Missing keys: ${missing.join(', ')}`, json, {
+			missing_keys: missing,
+		});
 	}
 
 	// Replace placeholders
@@ -62,11 +74,19 @@ export function template_command(
 	});
 
 	// Write output securely (0600 permissions)
-	write_secure(output, result);
+	write_secure(output_path, result);
 
-	info(`Resolved ${resolved.size} key(s) in ${input}:`);
-	for (const key of keys) {
-		info(`  ${key}`);
+	if (!json) {
+		info(`Resolved ${resolved.size} key(s) in ${input}:`);
+		for (const key of keys) {
+			info(`  ${key}`);
+		}
+		success(`Written to ${output_path}`);
+		return;
 	}
-	success(`Written to ${output}`);
+
+	output(
+		{ success: true, keys: [...keys], input, output: output_path },
+		true,
+	);
 }

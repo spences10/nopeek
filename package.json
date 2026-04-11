@@ -44,7 +44,6 @@
 		"release": "pnpm run build && changeset publish"
 	},
 	"dependencies": {
-		"chalk": "^5.6.2",
 		"citty": "^0.2.2"
 	},
 	"devDependencies": {

@@ -1,8 +1,13 @@
-import chalk from 'chalk';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { detect_secrets } from '../core/redaction.js';
-import { error, info, success, warning } from '../utils/output.js';
+import {
+	fail,
+	info,
+	output,
+	success,
+	warning,
+} from '../utils/output.js';
 
 const TARGET_PATTERNS = [
 	'.env',
@@ -13,20 +18,16 @@ const TARGET_PATTERNS = [
 	'.env.test',
 ];
 
-export function audit_command(dir: string): void {
-	info('Scanning for .env files...\n');
+export function audit_command(dir: string, json?: boolean): void {
+	if (!json) {
+		info('Scanning for .env files...\n');
+	}
 
-	let files_found = 0;
-	let total_secrets = 0;
-	const missing_gitignore: string[] = [];
-
-	// Check for .env files
 	let entries: string[];
 	try {
 		entries = readdirSync(dir);
 	} catch {
-		error(`Cannot read directory: ${dir}`);
-		process.exit(1);
+		fail(`Cannot read directory: ${dir}`, json);
 	}
 
 	const env_files = entries.filter(
@@ -34,7 +35,14 @@ export function audit_command(dir: string): void {
 	);
 
 	if (env_files.length === 0) {
-		info('No .env files found.');
+		if (!json) {
+			info('No .env files found.');
+			return;
+		}
+		output(
+			{ files: [], total_secrets: 0, missing_gitignore: [] },
+			true,
+		);
 		return;
 	}
 
@@ -44,54 +52,76 @@ export function audit_command(dir: string): void {
 		? readFileSync(gitignore_path, 'utf-8')
 		: '';
 
+	let total_secrets = 0;
+	const missing_gitignore: string[] = [];
+	const file_results: {
+		file: string;
+		secrets_found: number;
+		patterns: string[];
+		in_gitignore: boolean;
+	}[] = [];
+
 	for (const file of env_files) {
 		const path = join(dir, file);
 		const content = readFileSync(path, 'utf-8');
 		const hits = detect_secrets(content);
-		files_found++;
 
-		if (hits.length === 0) {
-			info(`${chalk.white(file)} — ${chalk.green('clean')}`);
-			continue;
+		const seen = new Set<string>();
+		for (const hit of hits) {
+			seen.add(hit.pattern.name);
+		}
+
+		const in_gitignore =
+			file === '.env.example' ||
+			gitignore_content.includes(file) ||
+			gitignore_content.includes('.env*') ||
+			gitignore_content.includes('.env');
+
+		if (!in_gitignore && file !== '.env.example') {
+			missing_gitignore.push(file);
 		}
 
 		total_secrets += hits.length;
-		info(
-			`${chalk.white(file)} — ${chalk.yellow(`${hits.length} secret(s) found:`)}`,
-		);
-
-		// Deduplicate by pattern name
-		const seen = new Set<string>();
-		for (const hit of hits) {
-			if (seen.has(hit.pattern.name)) continue;
-			seen.add(hit.pattern.name);
-			info(`    ${hit.pattern.name}`);
-		}
-
-		// Check gitignore coverage
-		if (
-			file !== '.env.example' &&
-			!gitignore_content.includes(file) &&
-			!gitignore_content.includes('.env*') &&
-			!gitignore_content.includes('.env')
-		) {
-			missing_gitignore.push(file);
-		}
+		file_results.push({
+			file,
+			secrets_found: hits.length,
+			patterns: [...seen],
+			in_gitignore,
+		});
 	}
 
-	console.error('');
-	if (total_secrets === 0) {
-		success('No secrets detected.');
-	} else {
-		warning(
-			`${total_secrets} secret(s) found across ${files_found} file(s).`,
-		);
-	}
+	if (!json) {
+		for (const f of file_results) {
+			if (f.secrets_found === 0) {
+				info(`${f.file} — clean`);
+			} else {
+				info(`${f.file} — ${f.secrets_found} secret(s) found:`);
+				for (const pattern of f.patterns) {
+					info(`    ${pattern}`);
+				}
+			}
+		}
 
-	if (missing_gitignore.length > 0) {
 		console.error('');
-		warning(
-			`Ensure these files are in .gitignore: ${missing_gitignore.join(', ')}`,
-		);
+		if (total_secrets === 0) {
+			success('No secrets detected.');
+		} else {
+			warning(
+				`${total_secrets} secret(s) found across ${env_files.length} file(s).`,
+			);
+		}
+
+		if (missing_gitignore.length > 0) {
+			console.error('');
+			warning(
+				`Ensure these files are in .gitignore: ${missing_gitignore.join(', ')}`,
+			);
+		}
+		return;
 	}
+
+	output(
+		{ files: file_results, total_secrets, missing_gitignore },
+		true,
+	);
 }

@@ -23,8 +23,13 @@ export default defineCommand({
 			description:
 				'Also save keys to nopeek config for future sessions',
 		},
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
 	},
 	run({ args }) {
-		load_command(args.file, args.only, args.persist);
+		load_command(args.file, args.only, args.persist, args.json);
 	},
 });

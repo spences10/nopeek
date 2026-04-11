@@ -20,11 +20,17 @@ export default defineCommand({
 			type: 'boolean',
 			description: 'Read value from current shell environment',
 		},
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
 	},
 	run({ args }) {
 		set_command(args.key, {
 			value: args.value,
 			from_env: args['from-env'],
+			json: args.json,
 		});
 	},
 });

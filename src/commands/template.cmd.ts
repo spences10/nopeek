@@ -18,8 +18,13 @@ export default defineCommand({
 			description: 'Output file path',
 			required: true,
 		},
+		json: {
+			type: 'boolean',
+			description: 'Output as JSON (default: true)',
+			default: true,
+		},
 	},
 	run({ args }) {
-		template_command(args.input, args.output);
+		template_command(args.input, args.output, args.json);
 	},
 });
