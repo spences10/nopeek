@@ -1,5 +1,12 @@
 # nopeek
 
+## 0.0.9
+
+### Patch Changes
+
+- 263f74a: Remove chalk dependency, default to JSON output, add fail()
+  helper for clean error paths
+
 ## 0.0.8
 
 ### Patch Changes
