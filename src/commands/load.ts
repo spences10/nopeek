@@ -2,9 +2,9 @@ import { existsSync } from 'node:fs';
 import { read_config, write_config } from '../core/config.js';
 import { parse_file } from '../core/env-file.js';
 import {
-	has_claude_env_file,
+	has_session_env_file,
 	inject_env,
-	is_claude_code,
+	is_llm_agent_session,
 	shell_escape,
 	write_nopeek_env,
 } from '../core/session.js';
@@ -50,12 +50,12 @@ export function load_command(
 	let method: string;
 	let source_path: string | undefined;
 
-	if (has_claude_env_file()) {
+	if (has_session_env_file()) {
 		for (const { key, value } of selected) {
 			inject_env(key, value);
 		}
-		method = 'claude_env_file';
-	} else if (is_claude_code()) {
+		method = 'env_file';
+	} else if (is_llm_agent_session()) {
 		source_path = write_nopeek_env(selected);
 		method = 'source_file';
 	} else {
@@ -74,7 +74,7 @@ export function load_command(
 		for (const key of keys) {
 			info(`  ${key}`);
 		}
-		if (method === 'claude_env_file') {
+		if (method === 'env_file') {
 			success('Keys are now available as environment variables.');
 		} else if (method === 'source_file') {
 			success('Run the source command above to load into session.');

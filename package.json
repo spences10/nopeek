@@ -1,12 +1,13 @@
 {
 	"name": "nopeek",
 	"version": "0.0.9",
-	"description": "CLI for Claude Code secret safety — secure proxy between Claude Code and your secrets",
+	"description": "CLI for LLM agent secret safety — load env secrets without exposing values",
 	"keywords": [
-		"claude",
-		"claude-code",
+		"agents",
 		"cli",
+		"coding-agents",
 		"env",
+		"llm",
 		"redaction",
 		"secrets",
 		"security"

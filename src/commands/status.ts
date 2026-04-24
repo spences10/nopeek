@@ -2,13 +2,13 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { read_config } from '../core/config.js';
 import { parse_file } from '../core/env-file.js';
-import { is_claude_code } from '../core/session.js';
+import { is_llm_agent_session } from '../core/session.js';
 import { scan_all } from '../detectors/index.js';
 import { info, label, output } from '../utils/output.js';
 
 export async function status_command(json?: boolean): Promise<void> {
 	const config = read_config();
-	const in_claude = is_claude_code();
+	const in_agent_session = is_llm_agent_session();
 	const keys = Object.keys(config.keys);
 	const profiles = Object.entries(config.cli_profiles);
 	const results = await scan_all();
@@ -37,8 +37,8 @@ export async function status_command(json?: boolean): Promise<void> {
 
 	const data = {
 		session: {
-			in_claude_code: in_claude,
-			has_env_file: !!process.env.CLAUDE_ENV_FILE,
+			in_llm_agent_session: in_agent_session,
+			has_env_file_injection: !!process.env.CLAUDE_ENV_FILE,
 		},
 		keys: keys.map((key) => ({
 			name: key,
@@ -60,7 +60,9 @@ export async function status_command(json?: boolean): Promise<void> {
 	if (!json) {
 		info(
 			'Session: ' +
-				(in_claude ? 'Inside Claude Code' : 'Outside Claude Code'),
+				(in_agent_session
+					? 'Inside LLM agent session'
+					: 'Outside LLM agent session'),
 		);
 
 		console.error('');

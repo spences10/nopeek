@@ -3,13 +3,15 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-export function has_claude_env_file(): boolean {
+export function has_session_env_file(): boolean {
 	return !!process.env.CLAUDE_ENV_FILE;
 }
 
-export function is_claude_code(): boolean {
+export function is_llm_agent_session(): boolean {
 	return (
-		!!process.env.CLAUDECODE || !!process.env.CLAUDE_CODE_ENTRYPOINT
+		has_session_env_file() ||
+		!!process.env.CLAUDECODE ||
+		!!process.env.CLAUDE_CODE_ENTRYPOINT
 	);
 }
 

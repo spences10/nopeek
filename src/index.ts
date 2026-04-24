@@ -20,7 +20,7 @@ const CONCEPTS_SECTION = `Concepts:
   Key       A secret name (e.g. DATABASE_URL). Values never appear in output.
   Source    Where the key came from: "set" (manual), "load" (from file).
   Profile   A named CLI auth config (e.g. AWS_PROFILE) — no inline creds.
-  Session   Claude Code session detected via CLAUDE_ENV_FILE or CLAUDECODE.`;
+  Session   LLM coding agent session detected via env-file injection or known agent markers.`;
 
 const EXAMPLES_SECTION = `Examples:
   npx nopeek load .env --only DATABASE_URL,API_KEY
@@ -39,7 +39,7 @@ const main = defineCommand({
 		name: 'nopeek',
 		version: pkg.version,
 		description:
-			'Secure proxy between Claude Code and your secrets. Claude knows key names, never key values.',
+			'Load env secrets for LLM coding agents without exposing values.',
 	},
 	subCommands: {
 		load: () =>
