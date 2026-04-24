@@ -1,5 +1,12 @@
 # nopeek
 
+## 0.0.11
+
+### Patch Changes
+
+- 3e5c49e: Add Google Cloud and Azure CLI detection plus audit
+  patterns for their common credential formats.
+
 ## 0.0.10
 
 ### Patch Changes

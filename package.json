@@ -1,6 +1,6 @@
 {
 	"name": "nopeek",
-	"version": "0.0.10",
+	"version": "0.0.11",
 	"description": "CLI for LLM agent secret safety — load env secrets without exposing values",
 	"keywords": [
 		"agents",
