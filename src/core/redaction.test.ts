@@ -57,6 +57,44 @@ describe('detect_secrets', () => {
 		);
 	});
 
+	it('detects Google Cloud API keys', () => {
+		const hits = detect_secrets(
+			'GOOGLE_API_KEY=AIza' + 'A'.repeat(35),
+		);
+		expect(
+			hits.some((h) => h.pattern.name === 'Google API Key'),
+		).toBe(true);
+	});
+
+	it('detects Google OAuth tokens', () => {
+		const hits = detect_secrets(
+			'CLOUDSDK_AUTH_ACCESS_TOKEN=ya29.' + 'a'.repeat(24),
+		);
+		expect(
+			hits.some((h) => h.pattern.name === 'Google OAuth Token'),
+		).toBe(true);
+	});
+
+	it('detects Azure credential environment variables', () => {
+		const hits = detect_secrets(
+			'ARM_CLIENT_SECRET=' + 'x'.repeat(24),
+		);
+		expect(
+			hits.some((h) => h.pattern.name === 'Azure Credential'),
+		).toBe(true);
+	});
+
+	it('detects Azure storage account keys', () => {
+		const hits = detect_secrets(
+			'DefaultEndpointsProtocol=https;AccountKey=' + 'A'.repeat(44),
+		);
+		expect(
+			hits.some(
+				(h) => h.pattern.name === 'Azure Storage Account Key',
+			),
+		).toBe(true);
+	});
+
 	it('does not false-positive on bare SHA256 hashes', () => {
 		const sha =
 			'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';

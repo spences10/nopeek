@@ -1,4 +1,6 @@
 import { aws_detector } from './aws.js';
+import { az_detector } from './az.js';
+import { gcloud_detector } from './gcloud.js';
 import { hcloud_detector } from './hcloud.js';
 import type { CliDetector, DetectorResult } from './types.js';
 
@@ -7,6 +9,8 @@ export type { CliDetector, DetectorResult };
 export const detectors: CliDetector[] = [
 	aws_detector,
 	hcloud_detector,
+	gcloud_detector,
+	az_detector,
 ];
 
 export async function scan_all(): Promise<DetectorResult[]> {

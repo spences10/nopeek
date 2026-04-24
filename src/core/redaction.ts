@@ -35,6 +35,24 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 			/(?:HCLOUD_TOKEN|hcloud_token|token)\s*[:=]\s*["']?[a-f0-9]{64}\b/,
 	},
 	{
+		name: 'Google API Key',
+		pattern: /AIza[0-9A-Za-z_-]{35}/,
+	},
+	{
+		name: 'Google OAuth Token',
+		pattern: /ya29\.[0-9A-Za-z_-]{20,}/,
+	},
+	{
+		name: 'Azure Credential',
+		pattern:
+			/(?:ARM_ACCESS_KEY|ARM_CLIENT_SECRET|AZURE_ACCESS_TOKEN|AZURE_CLIENT_SECRET|AZURE_PASSWORD|AZURE_STORAGE_KEY)\s*[:=]\s*["']?[^\s"']{8,}/i,
+	},
+	{
+		name: 'Azure Storage Account Key',
+		pattern:
+			/(?:AccountKey|SharedAccessKey)\s*=\s*[A-Za-z0-9+/=]{20,}/,
+	},
+	{
 		name: 'Private Key',
 		pattern: /-----BEGIN\s+[\w\s]*PRIVATE\s+KEY-----/,
 	},

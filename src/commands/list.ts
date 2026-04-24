@@ -1,6 +1,14 @@
 import { read_config } from '../core/config.js';
 import { info, output } from '../utils/output.js';
 
+function cli_profile_env_var(cli: string): string {
+	if (cli === 'aws') return 'AWS_PROFILE';
+	if (cli === 'hcloud') return 'HCLOUD_CONTEXT';
+	if (cli === 'gcloud') return 'CLOUDSDK_ACTIVE_CONFIG_NAME';
+	if (cli === 'az') return 'AZURE_SUBSCRIPTION_ID';
+	return `${cli.toUpperCase()}_PROFILE`;
+}
+
 export function list_command(json?: boolean): void {
 	const config = read_config();
 	const keys = Object.keys(config.keys);
@@ -14,12 +22,7 @@ export function list_command(json?: boolean): void {
 		cli_profiles: profiles.map(([cli, prof]) => ({
 			cli,
 			profile: prof.profile,
-			env_var:
-				cli === 'aws'
-					? 'AWS_PROFILE'
-					: cli === 'hcloud'
-						? 'HCLOUD_CONTEXT'
-						: `${cli.toUpperCase()}_PROFILE`,
+			env_var: cli_profile_env_var(cli),
 		})),
 	};
 

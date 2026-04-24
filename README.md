@@ -139,10 +139,12 @@ npx nopeek init
 Detects installed cloud CLIs, checks their auth configuration, and
 stores profile mappings.
 
-| CLI      | Safe pattern                      | Detection                       |
-| -------- | --------------------------------- | ------------------------------- |
-| `aws`    | Named profiles (`AWS_PROFILE`)    | `~/.aws/credentials` + env vars |
-| `hcloud` | Named contexts (`HCLOUD_CONTEXT`) | `~/.config/hcloud/cli.toml`     |
+| CLI      | Safer pattern                                        | Detection                                          |
+| -------- | ---------------------------------------------------- | -------------------------------------------------- |
+| `aws`    | Named profiles (`AWS_PROFILE`)                       | `~/.aws/credentials` + env vars                    |
+| `hcloud` | Named contexts (`HCLOUD_CONTEXT`)                    | `~/.config/hcloud/cli.toml`                        |
+| `gcloud` | Named configurations (`CLOUDSDK_ACTIVE_CONFIG_NAME`) | active gcloud account + inline credential env vars |
+| `az`     | Azure CLI cached login + active subscription         | `az account show` + inline credential env vars     |
 
 ### `status` - Show current state
 
@@ -191,6 +193,9 @@ secret files or embedding credentials inline in commands:
 			"Read(*.tfvars)",
 			"Read(*credentials*)",
 			"Read(*secret*)",
+			"Read(**/.config/gcloud/**)",
+			"Read(**/.azure/**)",
+			"Read(*service-account*.json)",
 
 			// Block cat/head on secret files
 			"Bash(cat .env)",
@@ -203,11 +208,22 @@ secret files or embedding credentials inline in commands:
 			"Bash(PGPASSWORD*)",
 			"Bash(*HCLOUD_TOKEN*)",
 			"Bash(hcloud context create*)",
+			"Bash(*GOOGLE_APPLICATION_CREDENTIALS*)",
+			"Bash(*CLOUDSDK_AUTH_ACCESS_TOKEN*)",
+			"Bash(*GOOGLE_OAUTH_ACCESS_TOKEN*)",
+			"Bash(*AZURE_CLIENT_SECRET*)",
+			"Bash(*ARM_CLIENT_SECRET*)",
+			"Bash(*AZURE_PASSWORD*)",
+			"Bash(*AZURE_ACCESS_TOKEN*)",
+			"Bash(*ARM_ACCESS_KEY*)",
 
 			// Block fetching secret values from cloud providers
 			"Bash(*secretsmanager get-secret-value*)",
 			"Bash(*hetzner*secret*)",
 			"Bash(*hetzner*access_key*)",
+			"Bash(gcloud auth print-access-token*)",
+			"Bash(gcloud auth application-default print-access-token*)",
+			"Bash(az account get-access-token*)",
 		],
 	},
 }
