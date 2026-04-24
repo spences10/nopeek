@@ -1,5 +1,12 @@
 # nopeek
 
+## 0.0.10
+
+### Patch Changes
+
+- 0a9a0fe: Generalize nopeek messaging from Claude Code-specific
+  wording to LLM coding agent secret loading.
+
 ## 0.0.9
 
 ### Patch Changes
