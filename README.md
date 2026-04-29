@@ -55,6 +55,21 @@ psql $DATABASE_URL -c "SELECT count(*) FROM users"
 > mention `{npx,pnpx,bunx} nopeek` and the agent can discover the
 > rest.
 
+### Optional agent reminders
+
+If you use a harness with persistent system-prompt extensions, add a
+small reminder so the model reaches for nopeek automatically instead
+of needing the Quick Start text in every prompt. For Pi users, the
+`@spences10/pi-nopeek` extension does this:
+
+```bash
+pi install npm:@spences10/pi-nopeek
+```
+
+[`my-pi`](https://github.com/spences10/my-pi) already includes this
+reminder by default. This is optional: nopeek remains harness-agnostic
+and still works anywhere when you mention it in the session.
+
 Three modes depending on environment:
 
 | Context                                       | What happens                                  |
