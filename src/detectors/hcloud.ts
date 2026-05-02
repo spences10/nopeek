@@ -8,6 +8,8 @@ function get_version(): string | null {
 	try {
 		const out = execSync('hcloud version 2>&1', {
 			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+			timeout: 2000,
 		});
 		const match = out.match(/(\d+\.\d+\.\d+)/);
 		return match ? match[1] : null;
@@ -20,6 +22,8 @@ function get_active_context(): string | null {
 	try {
 		const out = execSync('hcloud context active 2>&1', {
 			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+			timeout: 2000,
 		});
 		return out.trim() || null;
 	} catch {

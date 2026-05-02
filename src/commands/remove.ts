@@ -1,7 +1,12 @@
 import { read_config, write_config } from '../core/config.js';
+import { validate_key } from '../core/session.js';
 import { fail, output, success } from '../utils/output.js';
 
 export function remove_command(key: string, json?: boolean): void {
+	if (!validate_key(key)) {
+		fail('Invalid env key name', json, { invalid_key: key });
+	}
+
 	const config = read_config();
 
 	if (!config.keys[key]) {

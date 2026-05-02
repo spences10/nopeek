@@ -1,5 +1,9 @@
 import { createInterface } from 'node:readline';
 import { read_config, write_config } from '../core/config.js';
+import {
+	is_llm_agent_session,
+	validate_key,
+} from '../core/session.js';
 import { fail, info, output, success } from '../utils/output.js';
 
 interface SetOptions {
@@ -10,6 +14,10 @@ interface SetOptions {
 
 export function set_command(key: string, options: SetOptions): void {
 	const { json } = options;
+
+	if (!validate_key(key)) {
+		fail('Invalid env key name', json, { invalid_key: key });
+	}
 
 	if (options.from_env) {
 		const val = process.env[key];
@@ -26,6 +34,12 @@ export function set_command(key: string, options: SetOptions): void {
 	}
 
 	if (options.value) {
+		if (is_llm_agent_session()) {
+			fail(
+				'--value is unsafe in an LLM agent session; use --from-env or interactive TTY',
+				json,
+			);
+		}
 		store_key(key, options.value, json);
 		return;
 	}
@@ -58,8 +72,11 @@ function store_key(key: string, value: string, json?: boolean): void {
 	write_config(config);
 
 	if (!json) {
-		success(`${key} stored in nopeek config`);
+		success(`${key} stored in plaintext nopeek config`);
 		return;
 	}
-	output({ success: true, key, source: 'set' }, true);
+	output(
+		{ success: true, key, source: 'set', plaintext_config: true },
+		true,
+	);
 }

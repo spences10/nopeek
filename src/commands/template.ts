@@ -12,8 +12,7 @@ import {
 const PLACEHOLDER_RE = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
 
 function resolve_value(key: string): string | undefined {
-	const env_val = process.env[key];
-	if (env_val) return env_val;
+	if (Object.hasOwn(process.env, key)) return process.env[key];
 
 	const config = read_config();
 	return config.keys[key]?.value;

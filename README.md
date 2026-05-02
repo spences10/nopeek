@@ -126,10 +126,13 @@ npx nopeek set MY_API_KEY --from-env  # read from current shell env
 npx nopeek set MY_API_KEY             # interactive prompt (TTY only)
 ```
 
-Stores to `~/.config/nopeek/config.json` with `0600` permissions.
+Stores to `~/.config/nopeek/config.json` with `0600` permissions. This
+is plaintext at rest; use `set`/`--persist` only for secrets you are
+comfortable storing in your user config.
 
-> **Note:** Avoid `--value` inside an LLM agent session. The value
-> would appear in the conversation. Use `--from-env` instead.
+> **Note:** `--value` is rejected inside detected LLM agent sessions.
+> The value would appear in the conversation. Use `--from-env`
+> instead.
 
 ### `list` - Show available keys
 
@@ -188,9 +191,13 @@ strings, etc.). Checks `.gitignore` coverage.
   `0600`, temp env files are `0600`
 - **Atomic writes** - config is written via temp file + rename to
   prevent corruption
-- **No values in stdout** - in agent sessions, values are written to
-  env files or temp files; only `source` paths or key names reach
-  stdout
+- **Key validation before output** - invalid env names are rejected
+  before shell exports are printed
+- **No values in stdout** - in detected agent sessions, values are
+  written to env files or temp files; only `source` paths or key names
+  reach stdout
+- **Plaintext config warning** - persisted keys are local plaintext
+  secrets protected by file permissions, not encryption
 
 ## Recommended Agent Deny Rules
 
@@ -253,8 +260,13 @@ the agent from _reading_ the files in the first place.
 
 - **Pattern-based secret detection is best-effort.** The audit
   patterns catch known formats but cannot catch every possible secret.
+- **Agent detection is marker-based.** nopeek detects common agent
+  environment markers and env-file injection, but no CLI can guarantee
+  every harness is identified.
 - **Temp files exist on disk briefly.** Written to `/tmp/nopeek/` with
   `0600` perms, but values are on disk until the file is cleaned up.
+- **Persisted keys are plaintext.** `set` and `load --persist` store
+  values in `~/.config/nopeek/config.json` with `0600` permissions.
 - **Output redaction is not comprehensive.** Prefer loading secrets as
   environment variables so values never need to be printed.
 

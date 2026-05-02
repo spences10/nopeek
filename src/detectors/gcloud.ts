@@ -12,6 +12,8 @@ function get_version(): string | null {
 	try {
 		const out = execSync('gcloud version', {
 			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+			timeout: 2000,
 		});
 		const match = out.match(/Google Cloud SDK\s+(\S+)/);
 		return match ? match[1] : null;
@@ -28,7 +30,11 @@ function get_active_config(): string | null {
 	try {
 		const out = execSync(
 			'gcloud config configurations list --filter=is_active:true --format="value(name)"',
-			{ encoding: 'utf-8' },
+			{
+				encoding: 'utf-8',
+				stdio: ['ignore', 'pipe', 'ignore'],
+				timeout: 2000,
+			},
 		);
 		const config = out.trim().split('\n')[0];
 		return config || null;
@@ -41,7 +47,11 @@ function get_active_account(): string | null {
 	try {
 		const out = execSync(
 			'gcloud auth list --filter=status:ACTIVE --format="value(account)"',
-			{ encoding: 'utf-8' },
+			{
+				encoding: 'utf-8',
+				stdio: ['ignore', 'pipe', 'ignore'],
+				timeout: 2000,
+			},
 		);
 		const account = out.trim().split('\n')[0];
 		return account || null;

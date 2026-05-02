@@ -33,6 +33,9 @@ describe('is_llm_agent_session', () => {
 	const orig_env_file = process.env.CLAUDE_ENV_FILE;
 	const orig_code = process.env.CLAUDECODE;
 	const orig_entry = process.env.CLAUDE_CODE_ENTRYPOINT;
+	const orig_pi = process.env.PI_CODING_AGENT;
+	const orig_pi_session = process.env.PI_CODING_AGENT_SESSION_DIR;
+	const orig_codex = process.env.CODEX_SANDBOX;
 
 	afterEach(() => {
 		if (orig_env_file) {
@@ -49,6 +52,21 @@ describe('is_llm_agent_session', () => {
 			process.env.CLAUDE_CODE_ENTRYPOINT = orig_entry;
 		} else {
 			delete process.env.CLAUDE_CODE_ENTRYPOINT;
+		}
+		if (orig_pi) {
+			process.env.PI_CODING_AGENT = orig_pi;
+		} else {
+			delete process.env.PI_CODING_AGENT;
+		}
+		if (orig_pi_session) {
+			process.env.PI_CODING_AGENT_SESSION_DIR = orig_pi_session;
+		} else {
+			delete process.env.PI_CODING_AGENT_SESSION_DIR;
+		}
+		if (orig_codex) {
+			process.env.CODEX_SANDBOX = orig_codex;
+		} else {
+			delete process.env.CODEX_SANDBOX;
 		}
 	});
 
@@ -73,10 +91,31 @@ describe('is_llm_agent_session', () => {
 		expect(is_llm_agent_session()).toBe(true);
 	});
 
+	it('returns true when Pi coding agent marker is set', () => {
+		delete process.env.CLAUDE_ENV_FILE;
+		delete process.env.CLAUDECODE;
+		delete process.env.CLAUDE_CODE_ENTRYPOINT;
+		process.env.PI_CODING_AGENT = 'true';
+		expect(is_llm_agent_session()).toBe(true);
+	});
+
+	it('returns true when Codex marker is set', () => {
+		delete process.env.CLAUDE_ENV_FILE;
+		delete process.env.CLAUDECODE;
+		delete process.env.CLAUDE_CODE_ENTRYPOINT;
+		delete process.env.PI_CODING_AGENT;
+		delete process.env.PI_CODING_AGENT_SESSION_DIR;
+		process.env.CODEX_SANDBOX = 'seatbelt';
+		expect(is_llm_agent_session()).toBe(true);
+	});
+
 	it('returns false when no agent markers are set', () => {
 		delete process.env.CLAUDE_ENV_FILE;
 		delete process.env.CLAUDECODE;
 		delete process.env.CLAUDE_CODE_ENTRYPOINT;
+		delete process.env.PI_CODING_AGENT;
+		delete process.env.PI_CODING_AGENT_SESSION_DIR;
+		delete process.env.CODEX_SANDBOX;
 		expect(is_llm_agent_session()).toBe(false);
 	});
 });

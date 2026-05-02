@@ -1,9 +1,9 @@
+import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse_env_file } from './env-file.js';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { randomBytes } from 'node:crypto';
 
 function tmp_env(content: string): string {
 	const dir = join(
@@ -57,5 +57,20 @@ describe('parse_env_file', () => {
 		expect(entries[0].value).toBe(
 			'https://example.com?foo=bar&baz=1',
 		);
+	});
+
+	it('handles export prefixes and inline comments', () => {
+		const path = tmp_env('export FOO=bar # local comment\nURL=a#b');
+		const entries = parse_env_file(path);
+		expect(entries).toEqual([
+			{ key: 'FOO', value: 'bar' },
+			{ key: 'URL', value: 'a#b' },
+		]);
+	});
+
+	it('unescapes double quoted values', () => {
+		const path = tmp_env('MULTI="line\\nnext"');
+		const entries = parse_env_file(path);
+		expect(entries[0].value).toBe('line\nnext');
 	});
 });

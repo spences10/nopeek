@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
 import { read_config, write_config } from '../core/config.js';
-import { parse_file } from '../core/env-file.js';
+import { parse_file, type EnvEntry } from '../core/env-file.js';
 import {
 	has_session_env_file,
 	inject_env,
 	is_llm_agent_session,
 	shell_escape,
+	validate_key,
 	write_nopeek_env,
 } from '../core/session.js';
 import { fail, info, output, success } from '../utils/output.js';
@@ -26,7 +27,12 @@ export function load_command(
 	}
 
 	const filter = only
-		? new Set(only.split(',').map((k) => k.trim()))
+		? new Set(
+				only
+					.split(',')
+					.map((k) => k.trim())
+					.filter(Boolean),
+			)
 		: null;
 
 	const selected = entries.filter(
@@ -37,7 +43,11 @@ export function load_command(
 		fail('No matching keys found', json);
 	}
 
-	// Persist to config if requested
+	const invalid_keys = invalid_keys_for(selected);
+	if (invalid_keys.length > 0) {
+		fail('Invalid env key name(s)', json, { invalid_keys });
+	}
+
 	if (persist) {
 		const config = read_config();
 		for (const { key, value } of selected) {
@@ -81,7 +91,7 @@ export function load_command(
 		}
 		if (persist) {
 			success(
-				`${selected.length} key(s) saved to nopeek config for future sessions.`,
+				`${selected.length} key(s) saved to plaintext nopeek config for future sessions.`,
 			);
 		}
 		return;
@@ -92,10 +102,22 @@ export function load_command(
 		keys,
 		method,
 		persisted: !!persist,
+		plaintext_config: !!persist,
 		file,
 	};
 	if (source_path) {
 		result.source_path = source_path;
+		result.next_step = `source ${source_path}`;
 	}
 	output(result, true);
+}
+
+function invalid_keys_for(entries: EnvEntry[]): string[] {
+	return [
+		...new Set(
+			entries
+				.map(({ key }) => key)
+				.filter((key) => !validate_key(key)),
+		),
+	];
 }

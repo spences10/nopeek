@@ -22,6 +22,8 @@ function get_version(): string | null {
 	try {
 		const out = execSync('az version --output json', {
 			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+			timeout: 2000,
 		});
 		const parsed = JSON.parse(out) as { 'azure-cli'?: string };
 		return parsed['azure-cli'] || null;
@@ -34,6 +36,8 @@ function get_active_account(): AzureAccount | null {
 	try {
 		const out = execSync('az account show --output json', {
 			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+			timeout: 2000,
 		});
 		return JSON.parse(out) as AzureAccount;
 	} catch {

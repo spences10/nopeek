@@ -8,6 +8,8 @@ function get_version(): string | null {
 	try {
 		const out = execSync('aws --version 2>&1', {
 			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+			timeout: 2000,
 		});
 		const match = out.match(/aws-cli\/(\S+)/);
 		return match ? match[1] : null;
