@@ -1,5 +1,12 @@
 # nopeek
 
+## 0.0.12
+
+### Patch Changes
+
+- 991a0d9: Fix secret key validation, Pi agent detection, JSON
+  cleanliness, audit behavior, and vulnerable transitive dependencies.
+
 ## 0.0.11
 
 ### Patch Changes
