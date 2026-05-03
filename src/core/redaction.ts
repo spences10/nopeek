@@ -1,6 +1,7 @@
 export interface SecretPattern {
 	name: string;
 	pattern: RegExp;
+	multiline?: boolean;
 }
 
 export const SECRET_PATTERNS: SecretPattern[] = [
@@ -9,9 +10,13 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 		pattern: /AKIA[A-Z0-9]{16}/,
 	},
 	{
+		name: 'AWS Temp Access Key',
+		pattern: /ASIA[A-Z0-9]{16}/,
+	},
+	{
 		name: 'AWS Secret Key',
 		pattern:
-			/(?:SecretAccessKey|aws_secret_access_key)\s*[:=]\s*[A-Za-z0-9/+=]{40}/,
+			/\b(?:AWS_SECRET_ACCESS_KEY|aws_secret_access_key|secret_access_key|SecretAccessKey)\b\s*[:=]\s*["']?[A-Za-z0-9/+=]{40,}["']?/,
 	},
 	{
 		name: 'Bearer Token',
@@ -54,16 +59,48 @@ export const SECRET_PATTERNS: SecretPattern[] = [
 	},
 	{
 		name: 'Private Key',
-		pattern: /-----BEGIN\s+[\w\s]*PRIVATE\s+KEY-----/,
+		pattern:
+			/-----BEGIN\s+[\w\s]*PRIVATE\s+KEY-----(?:[\s\S]*?-----END\s+[\w\s]*PRIVATE\s+KEY-----)?/,
+		multiline: true,
 	},
 	{
 		name: 'Connection String with Password',
-		pattern: /:\/\/[^:]+:[^@]+@/,
+		pattern: /:\/\/[^\s:]+:[^\s@]+@/,
 	},
 	{
 		name: 'Generic Password Field',
 		pattern:
-			/(?:password|passwd|secret|token)\s*[:=]\s*["']?[^\s"']{8,}/i,
+			/\b(?:[A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY)|password|passwd|secret|token|api[_-]?key)\b\s*[:=]\s*["']?[A-Za-z0-9._:/+=@!-]{8,}["']?/i,
+	},
+	{
+		name: 'Generic Secret Phrase',
+		pattern:
+			/\b(?:password|passwd|secret|token|api[_-]?key)\b\s+(?:is|was|seen|value|header)?\s*["']?[A-Za-z0-9._:/+=@!-]{12,}["']?/i,
+	},
+	{
+		name: 'Tavily API Key',
+		pattern: /tvly-[a-zA-Z0-9_-]{20,}/,
+	},
+	{
+		name: 'Kagi API Key',
+		pattern:
+			/\bKAGI_API_KEY\b\s*[:=]\s*["']?[a-zA-Z0-9_-]{40,}\.[a-zA-Z0-9_-]{40,}["']?/i,
+	},
+	{
+		name: 'Brave API Key',
+		pattern: /BSA[A-Z0-9]{20,}/,
+	},
+	{
+		name: 'Firecrawl API Key',
+		pattern: /fc-[a-f0-9]{32}/,
+	},
+	{
+		name: 'GitHub Token',
+		pattern: /gh[pousr]_[a-zA-Z0-9]{36,}/,
+	},
+	{
+		name: 'GitHub Fine-grained PAT',
+		pattern: /github_pat_[a-zA-Z0-9_]{20,}/,
 	},
 ];
 
@@ -73,13 +110,46 @@ export function detect_secrets(
 	const hits: { line: number; pattern: SecretPattern }[] = [];
 	const lines = content.split('\n');
 
-	for (let i = 0; i < lines.length; i++) {
-		for (const sp of SECRET_PATTERNS) {
-			if (sp.pattern.test(lines[i])) {
-				hits.push({ line: i + 1, pattern: sp });
-			}
+	for (const sp of SECRET_PATTERNS) {
+		if (!sp.multiline) continue;
+		const pattern = global_regex(sp.pattern);
+		for (const match of content.matchAll(pattern)) {
+			hits.push({
+				line: line_number_at(content, match.index ?? 0),
+				pattern: sp,
+			});
 		}
 	}
 
-	return hits;
+	for (let i = 0; i < lines.length; i++) {
+		const line_hits = SECRET_PATTERNS.filter((sp) => {
+			if (sp.multiline) return false;
+			return line_regex(sp.pattern).test(lines[i]);
+		});
+		const specific_hits = line_hits.filter(
+			(sp) => sp.name !== 'Generic Password Field',
+		);
+		for (const sp of specific_hits.length > 0
+			? specific_hits
+			: line_hits) {
+			hits.push({ line: i + 1, pattern: sp });
+		}
+	}
+
+	return hits.sort((a, b) => a.line - b.line);
+}
+
+function line_regex(pattern: RegExp): RegExp {
+	return new RegExp(pattern.source, pattern.flags.replace('g', ''));
+}
+
+function global_regex(pattern: RegExp): RegExp {
+	const flags = pattern.flags.includes('g')
+		? pattern.flags
+		: `${pattern.flags}g`;
+	return new RegExp(pattern.source, flags);
+}
+
+function line_number_at(content: string, index: number): number {
+	return content.slice(0, index).split('\n').length;
 }

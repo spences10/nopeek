@@ -95,6 +95,83 @@ describe('detect_secrets', () => {
 		).toBe(true);
 	});
 
+	it('detects AWS temp access keys', () => {
+		const hits = detect_secrets(
+			'AWS_ACCESS_KEY_ID=ASIA' + 'A'.repeat(16),
+		);
+		expect(
+			hits.some((h) => h.pattern.name === 'AWS Temp Access Key'),
+		).toBe(true);
+	});
+
+	it('detects common AWS secret key assignment variants', () => {
+		const uppercase_hits = detect_secrets(
+			'AWS_SECRET_ACCESS_KEY=' + 'A'.repeat(40),
+		);
+		const lowercase_hits = detect_secrets(
+			'secret_access_key = "' + 'A'.repeat(40) + '"',
+		);
+		expect(
+			uppercase_hits.some((h) => h.pattern.name === 'AWS Secret Key'),
+		).toBe(true);
+		expect(
+			lowercase_hits.some((h) => h.pattern.name === 'AWS Secret Key'),
+		).toBe(true);
+	});
+
+	it('detects GitHub token variants', () => {
+		const hits = detect_secrets('github_pat_' + 'A'.repeat(30));
+		expect(
+			hits.some((h) => h.pattern.name === 'GitHub Fine-grained PAT'),
+		).toBe(true);
+	});
+
+	it('detects provider API key formats', () => {
+		const content = [
+			'TAVILY_API_KEY=tvly-' + 'A'.repeat(24),
+			'BRAVE_API_KEY=BSA' + 'A'.repeat(21),
+			'FIRECRAWL_API_KEY=fc-' + 'a'.repeat(32),
+			'KAGI_API_KEY=' + 'A'.repeat(40) + '.' + 'B'.repeat(40),
+		].join('\n');
+		const names = detect_secrets(content).map((h) => h.pattern.name);
+		expect(names).toContain('Tavily API Key');
+		expect(names).toContain('Brave API Key');
+		expect(names).toContain('Firecrawl API Key');
+		expect(names).toContain('Kagi API Key');
+	});
+
+	it('detects generic API key assignments', () => {
+		const hits = detect_secrets('API_KEY=EXAMPLEVALUE123456');
+		expect(
+			hits.some((h) => h.pattern.name === 'Generic Password Field'),
+		).toBe(true);
+	});
+
+	it('detects full multiline private key blocks once at the start line', () => {
+		const hits = detect_secrets(
+			[
+				'clean',
+				'-----BEGIN RSA PRIVATE KEY-----',
+				'A'.repeat(64),
+				'-----END RSA PRIVATE KEY-----',
+			].join('\n'),
+		);
+		const private_key_hits = hits.filter(
+			(h) => h.pattern.name === 'Private Key',
+		);
+		expect(private_key_hits).toHaveLength(1);
+		expect(private_key_hits[0].line).toBe(2);
+	});
+
+	it('detects freeform secret phrases in logs', () => {
+		const hits = detect_secrets(
+			['opaque fallback', 'secret', 'EXAMPLEVALUE123456'].join(' '),
+		);
+		expect(
+			hits.some((h) => h.pattern.name === 'Generic Secret Phrase'),
+		).toBe(true);
+	});
+
 	it('does not false-positive on bare SHA256 hashes', () => {
 		const sha =
 			'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
