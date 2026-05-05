@@ -4,8 +4,8 @@
 
 ### Patch Changes
 
-- 69e9d5a: Expand nopeek audit secret detection coverage for common token
-  variants and log-style disclosure patterns.
+- 69e9d5a: Expand nopeek audit secret detection coverage for common
+  token variants and log-style disclosure patterns.
 
 ## 0.0.12
 
