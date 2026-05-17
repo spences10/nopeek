@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  vite: 8.0.12
-
 importers:
 
   .:
@@ -23,7 +20,7 @@ importers:
         version: 25.6.2
       vite-plus:
         specifier: ^0.1.20
-        version: 0.1.20(@types/node@25.6.2)(typescript@5.9.3)(vite@8.0.12(@types/node@25.6.2))
+        version: 0.1.20(@types/node@25.6.2)(vite@8.0.12(@types/node@25.6.2))
       vitest:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@25.6.2)(vite@8.0.12(@types/node@25.6.2))
@@ -547,7 +544,7 @@ packages:
     resolution: {integrity: sha512-/x2EmFC4mT4NNzqvC3fmesuV97w5FC903KPmey4gsnJiMQ3Be1IlDKVaDaG8iqaLFHqJ2FVEkxZk5VmeLjIItw==}
     peerDependencies:
       msw: ^2.4.9
-      vite: 8.0.12
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       msw:
         optional: true
@@ -681,7 +678,7 @@ packages:
       '@vitest/ui': 4.1.5
       happy-dom: '*'
       jsdom: '*'
-      vite: 8.0.12
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -1209,11 +1206,6 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
-    engines: {node: '>=14.17'}
-    hasBin: true
-
   undici-types@7.19.2:
     resolution: {integrity: sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg==}
 
@@ -1285,7 +1277,7 @@ packages:
       '@vitest/ui': 4.1.5
       happy-dom: '*'
       jsdom: '*'
-      vite: 8.0.12
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -1793,7 +1785,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@voidzero-dev/vite-plus-core@0.1.20(@types/node@25.6.2)(typescript@5.9.3)':
+  '@voidzero-dev/vite-plus-core@0.1.20(@types/node@25.6.2)':
     dependencies:
       '@oxc-project/runtime': 0.127.0
       '@oxc-project/types': 0.127.0
@@ -1802,7 +1794,6 @@ snapshots:
     optionalDependencies:
       '@types/node': 25.6.2
       fsevents: 2.3.3
-      typescript: 5.9.3
 
   '@voidzero-dev/vite-plus-darwin-arm64@0.1.20':
     optional: true
@@ -1822,11 +1813,11 @@ snapshots:
   '@voidzero-dev/vite-plus-linux-x64-musl@0.1.20':
     optional: true
 
-  '@voidzero-dev/vite-plus-test@0.1.20(@types/node@25.6.2)(typescript@5.9.3)(vite@8.0.12(@types/node@25.6.2))':
+  '@voidzero-dev/vite-plus-test@0.1.20(@types/node@25.6.2)(vite@8.0.12(@types/node@25.6.2))':
     dependencies:
       '@standard-schema/spec': 1.1.0
       '@types/chai': 5.2.3
-      '@voidzero-dev/vite-plus-core': 0.1.20(@types/node@25.6.2)(typescript@5.9.3)
+      '@voidzero-dev/vite-plus-core': 0.1.20(@types/node@25.6.2)
       es-module-lexer: 1.7.0
       obug: 2.1.1
       pixelmatch: 7.2.0
@@ -2315,18 +2306,15 @@ snapshots:
   tslib@2.8.1:
     optional: true
 
-  typescript@5.9.3:
-    optional: true
-
   undici-types@7.19.2: {}
 
   universalify@0.1.2: {}
 
-  vite-plus@0.1.20(@types/node@25.6.2)(typescript@5.9.3)(vite@8.0.12(@types/node@25.6.2)):
+  vite-plus@0.1.20(@types/node@25.6.2)(vite@8.0.12(@types/node@25.6.2)):
     dependencies:
       '@oxc-project/types': 0.127.0
-      '@voidzero-dev/vite-plus-core': 0.1.20(@types/node@25.6.2)(typescript@5.9.3)
-      '@voidzero-dev/vite-plus-test': 0.1.20(@types/node@25.6.2)(typescript@5.9.3)(vite@8.0.12(@types/node@25.6.2))
+      '@voidzero-dev/vite-plus-core': 0.1.20(@types/node@25.6.2)
+      '@voidzero-dev/vite-plus-test': 0.1.20(@types/node@25.6.2)(vite@8.0.12(@types/node@25.6.2))
       oxfmt: 0.46.0
       oxlint: 1.61.0(oxlint-tsgolint@0.22.0)
       oxlint-tsgolint: 0.22.0
