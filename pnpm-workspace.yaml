@@ -2,7 +2,3 @@ packages:
   - .
 
 minimumReleaseAge: 2880
-
-# Temporary/security pins. Keep Renovate disabled for these overrides in renovate.json.
-overrides:
-  vite: '8.0.16'
