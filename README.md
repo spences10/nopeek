@@ -72,11 +72,16 @@ and still works anywhere when you mention it in the session.
 
 Three modes depending on environment:
 
-| Context                                       | What happens                                  |
-| --------------------------------------------- | --------------------------------------------- |
-| Agent session with env-file injection support | Writes directly to env file, most secure      |
-| Agent session without env-file injection      | Writes to temp file, outputs `source` command |
-| Regular shell                                 | Prints `export` statements for `eval`         |
+| Context                                       | What happens                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------ |
+| Agent session with env-file injection support | Writes directly to env file; future commands can use the variables |
+| Agent session without env-file injection      | Writes to temp file and outputs a `source` command                 |
+| Regular shell                                 | Prints `export` statements for `eval`                              |
+
+When env-file injection is unavailable, `load` cannot mutate the
+parent shell or future unrelated shell processes. Use the reported
+`next_command`, or run your command in the same shell after sourcing
+or evaluating the output.
 
 ## Usage
 
@@ -118,6 +123,15 @@ Maps, lists, numbers, and booleans are skipped.
 
 The `--persist` flag saves keys to `~/.config/nopeek/config.json` so a
 SessionStart hook can auto-inject them on future sessions.
+
+`load` returns a `method` field in JSON output. If `method` is
+`env_file`, the keys are available to future session commands. If
+`method` is `export` or `source_file`, the keys are not available
+until you evaluate the returned `next_command`, for example:
+
+```bash
+eval "$(npx nopeek load .env --no-json)"
+```
 
 ### `set` - Store a secret key
 

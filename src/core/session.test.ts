@@ -35,6 +35,7 @@ describe('is_llm_agent_session', () => {
 	const orig_entry = process.env.CLAUDE_CODE_ENTRYPOINT;
 	const orig_pi = process.env.PI_CODING_AGENT;
 	const orig_pi_session = process.env.PI_CODING_AGENT_SESSION_DIR;
+	const orig_my_pi = process.env.MY_PI_RUNTIME_MODE;
 	const orig_codex = process.env.CODEX_SANDBOX;
 
 	afterEach(() => {
@@ -62,6 +63,11 @@ describe('is_llm_agent_session', () => {
 			process.env.PI_CODING_AGENT_SESSION_DIR = orig_pi_session;
 		} else {
 			delete process.env.PI_CODING_AGENT_SESSION_DIR;
+		}
+		if (orig_my_pi) {
+			process.env.MY_PI_RUNTIME_MODE = orig_my_pi;
+		} else {
+			delete process.env.MY_PI_RUNTIME_MODE;
 		}
 		if (orig_codex) {
 			process.env.CODEX_SANDBOX = orig_codex;
@@ -99,12 +105,23 @@ describe('is_llm_agent_session', () => {
 		expect(is_llm_agent_session()).toBe(true);
 	});
 
+	it('returns true when my-pi runtime marker is set', () => {
+		delete process.env.CLAUDE_ENV_FILE;
+		delete process.env.CLAUDECODE;
+		delete process.env.CLAUDE_CODE_ENTRYPOINT;
+		delete process.env.PI_CODING_AGENT;
+		delete process.env.PI_CODING_AGENT_SESSION_DIR;
+		process.env.MY_PI_RUNTIME_MODE = 'interactive';
+		expect(is_llm_agent_session()).toBe(true);
+	});
+
 	it('returns true when Codex marker is set', () => {
 		delete process.env.CLAUDE_ENV_FILE;
 		delete process.env.CLAUDECODE;
 		delete process.env.CLAUDE_CODE_ENTRYPOINT;
 		delete process.env.PI_CODING_AGENT;
 		delete process.env.PI_CODING_AGENT_SESSION_DIR;
+		delete process.env.MY_PI_RUNTIME_MODE;
 		process.env.CODEX_SANDBOX = 'seatbelt';
 		expect(is_llm_agent_session()).toBe(true);
 	});
@@ -115,6 +132,7 @@ describe('is_llm_agent_session', () => {
 		delete process.env.CLAUDE_CODE_ENTRYPOINT;
 		delete process.env.PI_CODING_AGENT;
 		delete process.env.PI_CODING_AGENT_SESSION_DIR;
+		delete process.env.MY_PI_RUNTIME_MODE;
 		delete process.env.CODEX_SANDBOX;
 		expect(is_llm_agent_session()).toBe(false);
 	});

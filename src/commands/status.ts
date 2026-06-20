@@ -2,13 +2,23 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { read_config } from '../core/config.js';
 import { parse_file } from '../core/env-file.js';
-import { is_llm_agent_session } from '../core/session.js';
+import {
+	has_session_env_file,
+	is_llm_agent_session,
+} from '../core/session.js';
 import { scan_all } from '../detectors/index.js';
 import { info, label, output } from '../utils/output.js';
 
 export async function status_command(json?: boolean): Promise<void> {
 	const config = read_config();
 	const in_agent_session = is_llm_agent_session();
+	const has_env_injection = has_session_env_file();
+	const future_commands_see_loaded_vars = has_env_injection;
+	const load_method = has_env_injection
+		? 'env_file'
+		: in_agent_session
+			? 'source_file'
+			: 'export';
 	const keys = Object.keys(config.keys);
 	const profiles = Object.entries(config.cli_profiles);
 	const results = await scan_all();
@@ -38,7 +48,14 @@ export async function status_command(json?: boolean): Promise<void> {
 	const data = {
 		session: {
 			in_llm_agent_session: in_agent_session,
-			has_env_file_injection: !!process.env.CLAUDE_ENV_FILE,
+			has_env_file_injection: has_env_injection,
+			load_method,
+			future_commands_see_loaded_vars,
+			message: status_message(
+				in_agent_session,
+				has_env_injection,
+				load_method,
+			),
 		},
 		keys: keys.map((key) => ({
 			name: key,
@@ -63,6 +80,19 @@ export async function status_command(json?: boolean): Promise<void> {
 				(in_agent_session
 					? 'Inside LLM agent session'
 					: 'Outside LLM agent session'),
+		);
+		info(
+			'Future commands: ' +
+				(future_commands_see_loaded_vars
+					? 'will see variables loaded by nopeek load'
+					: 'will not see variables loaded by nopeek load automatically'),
+		);
+		info(
+			status_message(
+				in_agent_session,
+				has_env_injection,
+				load_method,
+			),
 		);
 
 		console.error('');
@@ -109,4 +139,18 @@ export async function status_command(json?: boolean): Promise<void> {
 	}
 
 	output(data, true);
+}
+
+function status_message(
+	in_agent_session: boolean,
+	has_env_injection: boolean,
+	load_method: string,
+): string {
+	if (has_env_injection) {
+		return 'nopeek load can inject keys into the session env file for future commands.';
+	}
+	if (in_agent_session && load_method === 'source_file') {
+		return 'Env-file injection is unavailable; nopeek load will provide a source command that must be used in the shell running your command.';
+	}
+	return 'nopeek load will print shell exports only; use eval/source in your current shell before running commands that need those keys.';
 }

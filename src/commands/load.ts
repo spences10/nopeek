@@ -9,7 +9,13 @@ import {
 	validate_key,
 	write_nopeek_env,
 } from '../core/session.js';
-import { fail, info, output, success } from '../utils/output.js';
+import {
+	fail,
+	info,
+	output,
+	success,
+	warning,
+} from '../utils/output.js';
 
 export function load_command(
 	file: string,
@@ -72,6 +78,15 @@ export function load_command(
 		method = 'export';
 	}
 
+	const next_command = next_command_for(
+		method,
+		file,
+		only,
+		persist,
+		source_path,
+	);
+	const availability = availability_message_for(method);
+
 	if (!json) {
 		if (method === 'source_file') {
 			console.log(`source ${source_path}`);
@@ -80,14 +95,17 @@ export function load_command(
 				console.log(`export ${key}=${shell_escape(value)}`);
 			}
 		}
-		info(`Loaded ${selected.length} keys from ${file}:`);
+		info(`Found ${selected.length} key(s) in ${file}:`);
 		for (const key of keys) {
 			info(`  ${key}`);
 		}
 		if (method === 'env_file') {
-			success('Keys are now available as environment variables.');
-		} else if (method === 'source_file') {
-			success('Run the source command above to load into session.');
+			success(availability);
+		} else {
+			warning(availability);
+			if (next_command) {
+				info(`Next step: ${next_command}`);
+			}
 		}
 		if (persist) {
 			success(
@@ -104,12 +122,47 @@ export function load_command(
 		persisted: !!persist,
 		plaintext_config: !!persist,
 		file,
+		available_to_future_commands: method === 'env_file',
+		message: availability,
 	};
+	if (method !== 'env_file') {
+		result.warning = availability;
+	}
+	if (next_command) {
+		result.next_command = next_command;
+	}
 	if (source_path) {
 		result.source_path = source_path;
-		result.next_step = `source ${source_path}`;
 	}
 	output(result, true);
+}
+
+function next_command_for(
+	method: string,
+	file: string,
+	only?: string,
+	persist?: boolean,
+	source_path?: string,
+): string | undefined {
+	if (method === 'env_file') return undefined;
+	if (method === 'source_file' && source_path)
+		return `source ${shell_escape(source_path)}`;
+
+	const args = [shell_escape(file)];
+	if (only) args.push('--only', shell_escape(only));
+	if (persist) args.push('--persist');
+	args.push('--no-json');
+	return `eval "$(nopeek load ${args.join(' ')})"`;
+}
+
+function availability_message_for(method: string): string {
+	if (method === 'env_file') {
+		return 'Keys were injected into the session env file and are available to future commands.';
+	}
+	if (method === 'source_file') {
+		return 'Env-file injection is unavailable; keys were written to a source file only and are not available until sourced in the shell that runs your command.';
+	}
+	return 'Shell exports were printed only; keys are not available to future commands unless you evaluate them in your current shell.';
 }
 
 function invalid_keys_for(entries: EnvEntry[]): string[] {
