@@ -1,5 +1,4 @@
 {
-	"editor.defaultFormatter": "oxc.oxc-vscode",
 	"editor.formatOnSave": true,
-	"oxc.fmt.configPath": "./vite.config.ts"
+	"typescript.tsdk": "node_modules/typescript/lib"
 }

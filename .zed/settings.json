@@ -1,24 +1,33 @@
 {
-	"lsp": {
-		"oxfmt": {
-			"initialization_options": {
-				"settings": {
-					"configPath": "./vite.config.ts",
-					"run": "onSave"
-				}
-			}
-		}
-	},
+	"format_on_save": "on",
 	"languages": {
 		"JavaScript": {
-			"format_on_save": "on",
-			"prettier": { "allowed": false },
-			"formatter": [{ "language_server": { "name": "oxfmt" } }]
+			"formatter": {
+				"external": {
+					"command": "pnpm",
+					"arguments": [
+						"exec",
+						"vp",
+						"fmt",
+						"--stdin-filepath",
+						"{buffer_path}"
+					]
+				}
+			}
 		},
 		"TypeScript": {
-			"format_on_save": "on",
-			"prettier": { "allowed": false },
-			"formatter": [{ "language_server": { "name": "oxfmt" } }]
+			"formatter": {
+				"external": {
+					"command": "pnpm",
+					"arguments": [
+						"exec",
+						"vp",
+						"fmt",
+						"--stdin-filepath",
+						"{buffer_path}"
+					]
+				}
+			}
 		}
 	}
 }
