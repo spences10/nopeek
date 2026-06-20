@@ -1,5 +1,14 @@
 # nopeek
 
+## 0.0.14
+
+### Patch Changes
+
+- 593b0aa: Add shell output mode and run command for child-process secret
+  injection workflows.
+- 9f8b54d: Clarify load persistence semantics and warn when session env injection
+  is unavailable.
+
 ## 0.0.13
 
 ### Patch Changes
