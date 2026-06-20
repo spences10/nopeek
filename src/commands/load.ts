@@ -6,8 +6,10 @@ import {
 	inject_env,
 	is_llm_agent_session,
 	shell_escape,
+	shell_export_line,
 	validate_key,
 	write_nopeek_env,
+	type Shell,
 } from '../core/session.js';
 import {
 	fail,
@@ -22,6 +24,7 @@ export function load_command(
 	only?: string,
 	persist?: boolean,
 	json?: boolean,
+	shell?: Shell,
 ): void {
 	if (!existsSync(file)) {
 		fail(`File not found: ${file}`, json);
@@ -63,6 +66,22 @@ export function load_command(
 	}
 
 	const keys = selected.map(({ key }) => key);
+
+	if (shell) {
+		for (const { key, value } of selected) {
+			console.log(shell_export_line(key, value, shell));
+		}
+		info(
+			`Emitted ${shell} shell assignments for ${selected.length} key(s) from ${file}.`,
+		);
+		if (persist) {
+			success(
+				`${selected.length} key(s) saved to plaintext nopeek config for future sessions.`,
+			);
+		}
+		return;
+	}
+
 	let method: string;
 	let source_path: string | undefined;
 
@@ -151,7 +170,7 @@ function next_command_for(
 	const args = [shell_escape(file)];
 	if (only) args.push('--only', shell_escape(only));
 	if (persist) args.push('--persist');
-	args.push('--no-json');
+	args.push('--shell', 'bash');
 	return `eval "$(nopeek load ${args.join(' ')})"`;
 }
 

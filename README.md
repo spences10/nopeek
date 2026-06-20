@@ -90,6 +90,7 @@ No install needed. Your agent runs it directly via `npx`:
 ```bash
 npx nopeek load .env
 npx nopeek load .env --only DATABASE_URL
+npx nopeek run .env --only API_KEY -- sh -c 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com'
 npx nopeek set MY_API_KEY --from-env
 npx nopeek status
 ```
@@ -105,6 +106,7 @@ subcommand from the CLI output.
 ```bash
 npx nopeek load .env
 npx nopeek load .env --only DATABASE_URL,API_KEY
+npx nopeek load .env --shell bash  # eval/source-safe shell output
 npx nopeek load .env --persist  # also save to config for future sessions
 npx nopeek load terraform.tfvars --only prod_password
 npx nopeek load production.tfvars.json --only db_password
@@ -130,8 +132,28 @@ SessionStart hook can auto-inject them on future sessions.
 until you evaluate the returned `next_command`, for example:
 
 ```bash
-eval "$(npx nopeek load .env --no-json)"
+eval "$(npx nopeek load .env --shell bash)"
+source <(npx nopeek load .env --shell bash)
+npx nopeek load .env --shell fish | source
 ```
+
+`--shell` supports `bash`, `zsh`, and `fish`. Shell assignments are
+written to stdout for the shell to consume; status/progress messages
+go to stderr.
+
+### `run` - Run one command with loaded secrets
+
+```bash
+npx nopeek run .env --only API_KEY -- node ./script.js
+npx nopeek run .env --only INGEST_TOKEN,FEEDGEN_SERVICE_URL -- sh -c 'curl -H "Authorization: Bearer $INGEST_TOKEN" "$FEEDGEN_SERVICE_URL"'
+npx nopeek run terraform.tfvars --only prod_password -- ./deploy.sh
+npx nopeek run production.tfvars.json --only DATABASE_URL -- sh -c 'psql "$DATABASE_URL" -c "select 1"'
+```
+
+`run` injects selected keys into only the child process environment
+and preserves the child command exit code. Use `sh -c` when you need
+shell expansion, pipes, redirects, or inline `$VARIABLE` expansion
+inside the child process.
 
 ### `set` - Store a secret key
 

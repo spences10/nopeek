@@ -13,8 +13,9 @@ const pkg = JSON.parse(
 const WORKFLOW_SECTION = `Workflow:
   1. npx nopeek init          Detect cloud CLIs, configure profiles
   2. npx nopeek load .env     Inject .env secrets into session
-  3. npx nopeek status        Verify session state and loaded keys
-  4. npx nopeek audit         Scan for exposed secrets`;
+  3. npx nopeek run .env -- cmd  Run one command with loaded secrets
+  4. npx nopeek status        Verify session state and loaded keys
+  5. npx nopeek audit         Scan for exposed secrets`;
 
 const CONCEPTS_SECTION = `Concepts:
   Key       A secret name (e.g. DATABASE_URL). Values never appear in output.
@@ -24,6 +25,7 @@ const CONCEPTS_SECTION = `Concepts:
 
 const EXAMPLES_SECTION = `Examples:
   npx nopeek load .env --only DATABASE_URL,API_KEY
+  npx nopeek run .env --only API_KEY -- sh -c 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com'
   npx nopeek set STRIPE_KEY --from-env
   npx nopeek list
   npx nopeek status
@@ -44,6 +46,7 @@ const main = defineCommand({
 	subCommands: {
 		load: () =>
 			import('./commands/load.cmd.js').then((m) => m.default),
+		run: () => import('./commands/run.cmd.js').then((m) => m.default),
 		set: () => import('./commands/set.cmd.js').then((m) => m.default),
 		list: () =>
 			import('./commands/list.cmd.js').then((m) => m.default),

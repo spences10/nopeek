@@ -77,6 +77,23 @@ describe('load_command', () => {
 		rmSync(payload.source_path, { force: true });
 	});
 
+	it('emits shell assignments when shell mode is requested', () => {
+		for (const key of AGENT_ENV_KEYS) delete process.env[key];
+		const path = tmp_env('SAFE=hello world');
+		const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+		const err = vi
+			.spyOn(console, 'error')
+			.mockImplementation(() => {});
+
+		load_command(path, undefined, false, true, 'bash');
+
+		expect(out).toHaveBeenCalledWith("export SAFE='hello world'");
+		expect(err).toHaveBeenCalledWith(
+			expect.stringContaining('Emitted bash shell assignments'),
+		);
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
 	it('explains export mode and returns an eval next command', () => {
 		for (const key of AGENT_ENV_KEYS) delete process.env[key];
 		const path = tmp_env('SAFE=ok');
@@ -93,7 +110,7 @@ describe('load_command', () => {
 		expect(payload.method).toBe('export');
 		expect(payload.available_to_future_commands).toBe(false);
 		expect(payload.next_command).toContain('eval "$(nopeek load ');
-		expect(payload.next_command).toContain(' --no-json)"');
+		expect(payload.next_command).toContain(' --shell bash)"');
 		expect(payload.message).toContain(
 			'Shell exports were printed only',
 		);

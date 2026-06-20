@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
 	has_session_env_file,
 	is_llm_agent_session,
+	shell_export_line,
 	validate_key,
 	write_nopeek_env,
 } from './session.js';
@@ -155,6 +156,23 @@ describe('validate_key', () => {
 		expect(validate_key("KEY'")).toBe(false);
 		expect(validate_key('KEY"')).toBe(false);
 		expect(validate_key('KEY\nNEWLINE')).toBe(false);
+	});
+});
+
+describe('shell_export_line', () => {
+	it('emits bash and zsh export statements', () => {
+		expect(shell_export_line('FOO', 'hello world', 'bash')).toBe(
+			"export FOO='hello world'",
+		);
+		expect(shell_export_line('FOO', "it's ok", 'zsh')).toBe(
+			"export FOO='it'\\''s ok'",
+		);
+	});
+
+	it('emits fish set statements', () => {
+		expect(shell_export_line('FOO', 'hello world', 'fish')).toBe(
+			'set -gx FOO hello\\ world',
+		);
 	});
 });
 

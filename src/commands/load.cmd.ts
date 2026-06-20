@@ -23,6 +23,12 @@ export default defineCommand({
 			description:
 				'Also save keys to nopeek config for future sessions',
 		},
+		shell: {
+			type: 'enum',
+			description:
+				'Emit eval/source-safe shell assignments to stdout',
+			options: ['bash', 'zsh', 'fish'],
+		},
 		json: {
 			type: 'boolean',
 			description: 'Output as JSON (default: true)',
@@ -30,6 +36,12 @@ export default defineCommand({
 		},
 	},
 	run({ args }) {
-		load_command(args.file, args.only, args.persist, args.json);
+		load_command(
+			args.file,
+			args.only,
+			args.persist,
+			args.json,
+			args.shell as 'bash' | 'zsh' | 'fish' | undefined,
+		);
 	},
 });

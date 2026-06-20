@@ -65,7 +65,29 @@ export function write_nopeek_env(
 	return path;
 }
 
+export type Shell = 'bash' | 'zsh' | 'fish';
+
+export function shell_export_line(
+	key: string,
+	value: string,
+	shell: Shell,
+): string {
+	assert_valid_key(key);
+	if (shell === 'fish') return `set -gx ${key} ${fish_escape(value)}`;
+	return `export ${key}=${shell_escape(value)}`;
+}
+
 export function shell_escape(value: string): string {
 	if (!/[^a-zA-Z0-9_./:@=-]/.test(value)) return value;
 	return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function fish_escape(value: string): string {
+	if (value === '') return "''";
+	return value.replace(/[^a-zA-Z0-9_./:@=-]/g, (ch) => {
+		if (ch === '\n') return '\\n';
+		if (ch === '\r') return '\\r';
+		if (ch === '\t') return '\\t';
+		return `\\${ch}`;
+	});
 }
