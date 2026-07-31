@@ -3,52 +3,48 @@
 [![built with vite+](https://img.shields.io/badge/built%20with-Vite+-646CFF?logo=vite&logoColor=white)](https://viteplus.dev)
 [![tested with vitest](https://img.shields.io/badge/tested%20with-Vitest-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev)
 
-CLI for LLM agent secret safety. nopeek loads environment secrets for
-coding agents without exposing secret values in tool output or chat
-context. Agents see key _names_, not key _values_.
+CLI for reducing accidental secret disclosure in LLM coding sessions.
+nopeek gives agents a normal workflow for secret-dependent commands
+without requiring secret values to be pasted into prompts or printed
+by the loading step.
 
 ## Quick Start
 
-In an LLM coding session, tell the agent to use nopeek:
+For Pi and other harnesses where each tool call starts a fresh shell,
+use `run` so loading and execution happen in one child process:
 
+```text
+"use npx nopeek run .env --only DATABASE_URL -- sh -c 'psql \"$DATABASE_URL\" -c \"SELECT count(*) FROM users\"'"
+
+"use npx nopeek run .env --only STRIPE_KEY -- sh -c 'curl -H \"Authorization: Bearer $STRIPE_KEY\" https://api.example.com'"
 ```
-"run npx nopeek load .env then use $DATABASE_URL to query the users table"
 
-"use npx nopeek load .env --only STRIPE_KEY and then curl the billing API"
+`run` reports no secret values itself. The child command can still
+print a secret, so choose commands and flags that do not dump their
+environment, credentials, or verbose authentication data.
 
-"run npx nopeek load .env --only API_KEY,API_SECRET and test the auth endpoint"
+If your harness supports persistent env-file injection, `load` can
+make selected variables available to later commands:
+
+```text
+"use npx nopeek load .env --only DATABASE_URL,API_KEY, then use those variables by name"
 ```
-
-The agent runs the command, gets back only the key name, and uses the
-variable in subsequent commands without seeing the actual value.
 
 ## How It Works
 
-Shell command output visible to an LLM coding agent may be sent to a
-model provider and retained by that provider. nopeek prevents secrets
-from appearing in that output.
+Shell output visible to an LLM coding agent may be sent to a model
+provider and retained there. Agents also have a habit of inspecting
+`.env` files or echoing variables when credentials are needed. nopeek
+provides a lower-risk path for routine work:
 
-**Step 1.** Tell your agent to use nopeek. It just needs to run the
-command; it will self-discover subcommands and flags from the CLI
-output:
+1. It parses the requested secret file locally.
+2. `run` gives selected values only to one child process, or `load`
+   uses the best environment-loading method available.
+3. nopeek's normal status output reports key names and loading state,
+   not values.
 
-```bash
-npx nopeek load .env --only DATABASE_URL
-```
-
-**Step 2.** nopeek injects the value into the session environment and
-prints only the key name:
-
-```
-Loaded 1 key from .env: DATABASE_URL
-```
-
-**Step 3.** The agent can now use the variable by name without ever
-seeing the value:
-
-```bash
-psql $DATABASE_URL -c "SELECT count(*) FROM users"
-```
+This reduces accidental disclosure. It does not make secrets
+inaccessible to the agent or to the child command that receives them.
 
 > **Important:** Your agent does not know about nopeek unless you
 > mention it. You do not need to spell out the full command, just
@@ -67,21 +63,24 @@ pi install npm:@spences10/pi-nopeek
 ```
 
 [`my-pi`](https://github.com/spences10/my-pi) already includes this
-reminder by default. This is optional: nopeek remains harness-agnostic
-and still works anywhere when you mention it in the session.
+reminder by default. Its separate `pi-redact` extension also applies
+best-effort, last-mile redaction to tool results before model context.
+Those are optional defense-in-depth features, not capabilities of the
+standalone nopeek CLI. nopeek remains harness-agnostic and works
+anywhere when you mention it in the session.
 
-Three modes depending on environment:
+`load` has three environment-dependent modes:
 
-| Context                                       | What happens                                                       |
-| --------------------------------------------- | ------------------------------------------------------------------ |
-| Agent session with env-file injection support | Writes directly to env file; future commands can use the variables |
-| Agent session without env-file injection      | Writes to temp file and outputs a `source` command                 |
-| Regular shell                                 | Prints `export` statements for `eval`                              |
+| Method        | Context                                      | Availability                                                                     |
+| ------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
+| `env_file`    | Harness exposes an env-file injection target | Future commands in that session can use the variables                            |
+| `source_file` | Agent session without env-file injection     | A `0600` temp file is created; variables exist only in the shell that sources it |
+| `export`      | Regular shell                                | Assignments are printed; variables exist only if the parent shell evaluates them |
 
-When env-file injection is unavailable, `load` cannot mutate the
-parent shell or future unrelated shell processes. Use the reported
-`next_command`, or run your command in the same shell after sourcing
-or evaluating the output.
+`load` reports its method and whether future commands can see the
+variables. It cannot mutate a parent shell. With `source_file` or
+`export`, consume the reported command in the same shell as the
+secret-dependent command, or prefer `nopeek run`.
 
 ## Usage
 
@@ -95,9 +94,9 @@ npx nopeek set MY_API_KEY --from-env
 npx nopeek status
 ```
 
-All commands are designed to be run inside an LLM coding session. Just
-mention `nopeek` in your prompt. The agent will discover the right
-subcommand from the CLI output.
+The safe default for an LLM coding session is `run`, or `load` when
+`status` confirms env-file injection is available. Commands that emit
+shell assignments require extra care, as described below.
 
 ## Commands
 
@@ -137,9 +136,13 @@ source <(npx nopeek load .env --shell bash)
 npx nopeek load .env --shell fish | source
 ```
 
-`--shell` supports `bash`, `zsh`, and `fish`. Shell assignments are
-written to stdout for the shell to consume; status/progress messages
-go to stderr.
+`--shell` supports `bash`, `zsh`, and `fish`. It deliberately writes
+assignments containing secret values to stdout for a shell to consume;
+status/progress messages go to stderr. Do not run this mode as a plain
+agent tool call where stdout will enter conversation context. Pipe or
+evaluate it directly in a trusted shell. Likewise, output modes that
+print exports (including regular-shell non-JSON use) are not
+value-hiding modes.
 
 ### `run` - Run one command with loaded secrets
 
@@ -153,7 +156,10 @@ npx nopeek run production.tfvars.json --only DATABASE_URL -- sh -c 'psql "$DATAB
 `run` injects selected keys into only the child process environment
 and preserves the child command exit code. Use `sh -c` when you need
 shell expansion, pipes, redirects, or inline `$VARIABLE` expansion
-inside the child process.
+inside the child process. The child retains normal access to its
+environment and stdout: avoid `env`, `printenv`, shell tracing,
+verbose HTTP authentication, and other behavior that can print
+credentials.
 
 ### `set` - Store a secret key
 
@@ -229,17 +235,19 @@ strings, etc.). Checks `.gitignore` coverage.
   prevent corruption
 - **Key validation before output** - invalid env names are rejected
   before shell exports are printed
-- **No values in stdout** - in detected agent sessions, values are
-  written to env files or temp files; only `source` paths or key names
-  reach stdout
+- **Name-only normal status output** - `run` and default
+  detected-agent loading report names/state rather than values;
+  explicit shell-output modes and child commands can still print
+  values
 - **Plaintext config warning** - persisted keys are local plaintext
   secrets protected by file permissions, not encryption
 
 ## Recommended Agent Deny Rules
 
-nopeek is the primary defense, but deny rules are a useful safety net
-in any agent runtime that supports them. Block the agent from reading
-secret files or embedding credentials inline in commands:
+nopeek is a workflow control, not an access-control boundary. Deny
+rules are the enforcement layer in runtimes that support them. Use
+them to block agents from reading secret files or embedding
+credentials inline in commands:
 
 ```jsonc
 {
@@ -288,23 +296,42 @@ secret files or embedding credentials inline in commands:
 ```
 
 Without these rules, an agent can still read a `.tfvars` or `.env`
-file directly and hardcode the values into a shell command. nopeek
-prevents secrets from appearing in _output_, but deny rules prevent
-the agent from _reading_ the files in the first place.
+file directly and hardcode or print the values. Deny rules reduce that
+access; nopeek gives cooperative agents a practical alternative.
 
-## Limitations
+## Threat Model and Non-Goals
 
-- **Pattern-based secret detection is best-effort.** The audit
-  patterns catch known formats but cannot catch every possible secret.
-- **Agent detection is marker-based.** nopeek detects common agent
-  environment markers and env-file injection, but no CLI can guarantee
-  every harness is identified.
-- **Temp files exist on disk briefly.** Written to `/tmp/nopeek/` with
-  `0600` perms, but values are on disk until the file is cleaned up.
+nopeek is designed for a cooperative coding agent that needs to run a
+command with credentials while avoiding accidental disclosure during
+loading. It protects against common mistakes such as pasting a value
+into chat, reading an entire `.env` file for one key, or printing
+exports as an intermediate step when `run`/env-file injection is used.
+
+nopeek does **not** protect secrets from:
+
+- an agent that deliberately reads the source file or prints variables
+- a child command that dumps its environment, traces commands, or logs
+  credentials
+- a compromised nopeek package, dependency, shell, child process, or
+  user account
+- another process with sufficient access to the same user-owned files
+
+Additional limitations:
+
+- **Pattern-based secret detection is best-effort.** `audit` scans
+  `.env` files for known patterns and cannot identify every secret.
+- **Agent detection is marker-based.** An unknown harness may be
+  treated like a regular shell; check `nopeek status` and avoid
+  assignment-emitting modes in agent-visible output.
+- **Temp files remain on disk.** `source_file` writes values under
+  `/tmp/nopeek/` with `0600` permissions; nopeek does not currently
+  remove them automatically.
 - **Persisted keys are plaintext.** `set` and `load --persist` store
   values in `~/.config/nopeek/config.json` with `0600` permissions.
-- **Output redaction is not comprehensive.** Prefer loading secrets as
-  environment variables so values never need to be printed.
+- **Redaction is separate and best-effort.** Standalone nopeek does
+  not redact arbitrary child output. Harness integrations such as
+  my-pi may add a separate safety net, but cannot guarantee complete
+  redaction.
 
 ## License
 
