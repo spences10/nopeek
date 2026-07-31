@@ -1,5 +1,12 @@
 # nopeek
 
+## 0.0.15
+
+### Patch Changes
+
+- 7f2dea6: Clarify nopeek’s threat model, prioritize run workflows,
+  and distinguish optional my-pi redaction from standalone behavior.
+
 ## 0.0.14
 
 ### Patch Changes
