@@ -2,12 +2,15 @@ import { randomBytes } from 'node:crypto';
 import {
 	existsSync,
 	mkdirSync,
+	readFileSync,
+	readdirSync,
 	rmSync,
 	writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { default_temp_env_root } from '../core/temp-env.js';
 import load_cmd from './load.cmd.js';
 import { load_command } from './load.js';
 
@@ -60,12 +63,49 @@ describe('load_command', () => {
 		});
 
 		expect(() => load_command(path, undefined, false, false)).toThrow(
-			'exit:1',
+			'Invalid dotenv at line 1',
 		);
-		expect(log).not.toHaveBeenCalledWith(
-			expect.stringContaining('export BAD;echo HACK=value'),
-		);
+		expect(log).not.toHaveBeenCalled();
 		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
+	it('validates the whole file before --only, persistence, temp files, or output', () => {
+		for (const key of AGENT_ENV_KEYS) delete process.env[key];
+		process.env.PI_CODING_AGENT = 'true';
+		const temp_root = default_temp_env_root();
+		const temp_before = existsSync(temp_root)
+			? readdirSync(temp_root).sort()
+			: [];
+		const config_root = join(
+			tmpdir(),
+			`nopeek-config-test-${randomBytes(4).toString('hex')}`,
+		);
+		process.env.XDG_CONFIG_HOME = config_root;
+		const path = tmp_env('SAFE=ok\n__proto__=sentinel-secret');
+		const session_env_file = join(join(path, '..'), 'session.env');
+		writeFileSync(session_env_file, 'ORIGINAL=yes\n');
+		process.env.CLAUDE_ENV_FILE = session_env_file;
+		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+		const stderr = vi
+			.spyOn(console, 'error')
+			.mockImplementation(() => {});
+
+		expect(() => load_command(path, 'SAFE', true, false)).toThrow(
+			'unsupported key "__proto__"',
+		);
+		expect(log).not.toHaveBeenCalled();
+		expect(stderr).not.toHaveBeenCalled();
+		expect(existsSync(join(config_root, 'nopeek'))).toBe(false);
+		expect(readFileSync(session_env_file, 'utf-8')).toBe(
+			'ORIGINAL=yes\n',
+		);
+		const temp_after = existsSync(temp_root)
+			? readdirSync(temp_root).sort()
+			: [];
+		expect(temp_after).toEqual(temp_before);
+
+		rmSync(join(path, '..'), { recursive: true, force: true });
+		rmSync(config_root, { recursive: true, force: true });
 	});
 
 	it('uses source-file mode inside Pi agent sessions', () => {

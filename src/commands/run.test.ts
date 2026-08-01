@@ -1,5 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +39,24 @@ describe('run_command', () => {
 				'process.exit(process.env.SECRET === "value" && process.env.OTHER === undefined ? 7 : 1)',
 			]),
 		).toThrow('exit:7');
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
+	it('validates the whole file before --only or spawning a command', () => {
+		const path = tmp_file(
+			'prod.tfvars.json',
+			'{"SAFE":"ok","nested":{"constructor":"sentinel-secret"}}',
+		);
+		const marker = join(join(path, '..'), 'spawned');
+
+		expect(() =>
+			run_command(path, 'SAFE', [
+				process.execPath,
+				'-e',
+				`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'yes')`,
+			]),
+		).toThrow('unsupported output key "constructor"');
+		expect(existsSync(marker)).toBe(false);
 		rmSync(join(path, '..'), { recursive: true, force: true });
 	});
 

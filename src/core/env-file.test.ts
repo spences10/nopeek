@@ -17,60 +17,84 @@ function tmp_env(content: string): string {
 }
 
 describe('parse_env_file', () => {
-	it('parses simple KEY=VALUE', () => {
-		const path = tmp_env('FOO=bar\nBAZ=qux');
-		const entries = parse_env_file(path);
-		expect(entries).toEqual([
-			{ key: 'FOO', value: 'bar' },
-			{ key: 'BAZ', value: 'qux' },
-		]);
-	});
-
-	it('handles double-quoted values', () => {
-		const path = tmp_env('DB_URL="postgres://localhost/db"');
-		const entries = parse_env_file(path);
-		expect(entries[0].value).toBe('postgres://localhost/db');
-	});
-
-	it('handles single-quoted values', () => {
-		const path = tmp_env("SECRET='my secret value'");
-		const entries = parse_env_file(path);
-		expect(entries[0].value).toBe('my secret value');
-	});
-
-	it('skips comments and blank lines', () => {
-		const path = tmp_env('# comment\n\nFOO=bar\n  \n# another');
-		const entries = parse_env_file(path);
-		expect(entries).toHaveLength(1);
-		expect(entries[0].key).toBe('FOO');
-	});
-
-	it('skips lines without =', () => {
-		const path = tmp_env('NOPE\nFOO=bar');
-		const entries = parse_env_file(path);
-		expect(entries).toHaveLength(1);
-	});
-
-	it('handles values with = signs', () => {
-		const path = tmp_env('URL=https://example.com?foo=bar&baz=1');
-		const entries = parse_env_file(path);
-		expect(entries[0].value).toBe(
-			'https://example.com?foo=bar&baz=1',
+	it('parses supported dotenv syntax', () => {
+		const path = tmp_env(
+			[
+				'# comment',
+				'FOO=bar',
+				'export DB_URL="postgres://localhost/db" # local',
+				"SECRET='my secret value'",
+				'URL=https://example.com?foo=bar&baz=1',
+				'MULTI="line\\nnext"',
+				'EMPTY=',
+			].join('\n'),
 		);
-	});
-
-	it('handles export prefixes and inline comments', () => {
-		const path = tmp_env('export FOO=bar # local comment\nURL=a#b');
-		const entries = parse_env_file(path);
-		expect(entries).toEqual([
+		expect(parse_env_file(path)).toEqual([
 			{ key: 'FOO', value: 'bar' },
-			{ key: 'URL', value: 'a#b' },
+			{ key: 'DB_URL', value: 'postgres://localhost/db' },
+			{ key: 'SECRET', value: 'my secret value' },
+			{ key: 'URL', value: 'https://example.com?foo=bar&baz=1' },
+			{ key: 'MULTI', value: 'line\nnext' },
+			{ key: 'EMPTY', value: '' },
 		]);
 	});
 
-	it('unescapes double quoted values', () => {
-		const path = tmp_env('MULTI="line\\nnext"');
-		const entries = parse_env_file(path);
-		expect(entries[0].value).toBe('line\nnext');
+	it('handles exact export tokens and the documented # rule', () => {
+		const path = tmp_env(
+			[
+				'export=one',
+				'exported=two',
+				'export_token=three',
+				'export ACTUAL=four',
+				'LITERAL=a#b',
+				'COMMENTED=value # comment',
+				'VALUE_START=# comment',
+				'QUOTED="# literal"',
+			].join('\n'),
+		);
+		expect(parse_env_file(path)).toEqual([
+			{ key: 'export', value: 'one' },
+			{ key: 'exported', value: 'two' },
+			{ key: 'export_token', value: 'three' },
+			{ key: 'ACTUAL', value: 'four' },
+			{ key: 'LITERAL', value: 'a#b' },
+			{ key: 'COMMENTED', value: 'value' },
+			{ key: 'VALUE_START', value: '# comment' },
+			{ key: 'QUOTED', value: '# literal' },
+		]);
 	});
+
+	it.each([
+		['BOM', '\uFEFFTOKEN=value', 'line 1'],
+		[
+			'prototype-sensitive name',
+			'__proto__=secret',
+			'unsupported key "__proto__"',
+		],
+		['missing equals', 'NOPE', 'line 1'],
+		['invalid name', 'BAD-NAME=value', 'line 1'],
+		['malformed double quote', 'TOKEN="secret', 'TOKEN'],
+		['malformed single quote', "TOKEN='secret", 'TOKEN'],
+		['trailing content', 'TOKEN="secret" garbage', 'TOKEN'],
+		['unsupported escape', 'TOKEN="secret\\x"', 'TOKEN'],
+		[
+			'duplicate key',
+			'TOKEN=first\nTOKEN=second',
+			'duplicate key "TOKEN"',
+		],
+	])(
+		'rejects %s without exposing values',
+		(_name, content, diagnostic) => {
+			let message = '';
+			try {
+				parse_env_file(tmp_env(content));
+			} catch (error) {
+				message = String(error);
+			}
+			expect(message).toContain(diagnostic);
+			expect(message).not.toContain('secret');
+			expect(message).not.toContain('first');
+			expect(message).not.toContain('second');
+		},
+	);
 });

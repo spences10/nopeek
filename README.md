@@ -111,16 +111,40 @@ npx nopeek load terraform.tfvars --only prod_password
 npx nopeek load production.tfvars.json --only db_password
 ```
 
-Supported formats:
+Supported files use deliberately strict, fail-closed grammars. A
+malformed or unsupported value rejects the whole file before `--only`
+filtering or any secret-loading side effect.
 
-| Extension        | Format                        |
-| ---------------- | ----------------------------- |
-| `.env`, `.env.*` | `KEY=value`                   |
-| `.tfvars`        | `key = "value"` (HCL strings) |
-| `.tfvars.json`   | JSON top-level strings        |
-
-For `.tfvars` files, only top-level quoted string values are loaded.
-Maps, lists, numbers, and booleans are skipped.
+- **`.env` and `.env.*`:** blank lines, `#` comment lines, and
+  `[export ]NAME=VALUE` assignments are supported. Names match
+  `[A-Za-z_][A-Za-z0-9_]*`; `export` is recognized only as a separate
+  prefix, so `export`, `exported`, and `export_token` remain valid
+  names. Whitespace around `=` and CRLF are accepted. Values may be
+  unquoted, single quoted (literal), or double quoted with `\\`, `\"`,
+  `\n`, `\r`, and `\t` escapes. In unquoted values, `#` starts a
+  comment only after whitespace; a value-leading `#` and `#` inside
+  either quote style are data. A closed quoted value may only be
+  followed by whitespace or a whitespace-prefixed `#` comment.
+  Duplicate names, prototype-sensitive output names (`__proto__`,
+  `prototype`, `constructor`), a UTF-8 BOM, expansion, multiline
+  values, unknown escapes, malformed quotes, and other shell syntax
+  are rejected.
+- **`.tfvars`:** top-level assignments and nested object/map
+  assignments are supported when every leaf is a double-quoted string.
+  Identifier or quoted keys, `#`/`//` line comments,
+  whitespace-separated multiline or same-line maps, and the same basic
+  escapes as above are accepted. Nested leaf names are flattened to
+  their leaf key for environment loading; duplicate assignments,
+  prototype-sensitive leaf names, or any resulting leaf-key collision
+  reject the file. Commas, heredocs, interpolation, expressions,
+  references, functions, dynamic keys, lists, numbers, booleans, null,
+  multiline strings, and a BOM are rejected.
+- **`.tfvars.json`:** the root must be a JSON object whose leaves are
+  strings; nested objects use the same collision-checked leaf-key
+  flattening. Only JSON whitespace (space, tab, CR, LF) is accepted.
+  Duplicate members at any depth, prototype-sensitive leaf names,
+  flattened collisions, arrays, numbers, booleans, null, trailing
+  content, and a BOM are rejected.
 
 The `--persist` flag saves keys to `~/.config/nopeek/config.json` so a
 SessionStart hook can auto-inject them on future sessions.
