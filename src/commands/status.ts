@@ -18,7 +18,7 @@ export async function status_command(json?: boolean): Promise<void> {
 		? 'env_file'
 		: in_agent_session
 			? 'source_file'
-			: 'export';
+			: 'name_only';
 	const keys = Object.keys(config.keys);
 	const profiles = Object.entries(config.cli_profiles);
 	const results = await scan_all();
@@ -46,6 +46,7 @@ export async function status_command(json?: boolean): Promise<void> {
 	}
 
 	const data = {
+		contains_values: false,
 		session: {
 			in_llm_agent_session: in_agent_session,
 			has_env_file_injection: has_env_injection,
@@ -152,5 +153,5 @@ function status_message(
 	if (in_agent_session && load_method === 'source_file') {
 		return 'Env-file injection is unavailable; nopeek load will provide a source command that must be used in the shell running your command.';
 	}
-	return 'nopeek load will print shell exports only; use eval/source in your current shell before running commands that need those keys.';
+	return 'nopeek load defaults to name-only output; use --shell with explicit --allow-values only in a trusted interactive shell.';
 }

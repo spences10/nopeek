@@ -26,8 +26,13 @@ export default defineCommand({
 		shell: {
 			type: 'enum',
 			description:
-				'Emit eval/source-safe shell assignments to stdout',
+				'Choose shell assignment syntax (requires --allow-values)',
 			options: ['bash', 'zsh', 'fish'],
+		},
+		'allow-values': {
+			type: 'boolean',
+			description:
+				'Explicitly allow secret values in stdout (rejected in agent sessions)',
 		},
 		json: {
 			type: 'boolean',
@@ -42,6 +47,7 @@ export default defineCommand({
 			args.persist,
 			args.json,
 			args.shell as 'bash' | 'zsh' | 'fish' | undefined,
+			args['allow-values'],
 		);
 	},
 });

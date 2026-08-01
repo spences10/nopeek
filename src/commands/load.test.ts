@@ -1,8 +1,14 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import load_cmd from './load.cmd.js';
 import { load_command } from './load.js';
 
 const AGENT_ENV_KEYS = [
@@ -30,6 +36,15 @@ function tmp_env(content: string): string {
 
 describe('load_command', () => {
 	const original_env = { ...process.env };
+
+	it('wires the allow-values option into citty help metadata', () => {
+		const args = load_cmd.args as
+			| Record<string, { type?: string; description?: string }>
+			| undefined;
+		const arg = args?.['allow-values'];
+		expect(arg).toMatchObject({ type: 'boolean' });
+		expect(arg?.description).toContain('secret values');
+	});
 
 	afterEach(() => {
 		process.env = { ...original_env };
@@ -77,7 +92,7 @@ describe('load_command', () => {
 		rmSync(payload.source_path, { force: true });
 	});
 
-	it('emits shell assignments when shell mode is requested', () => {
+	it('documents JSON+shell+allow as raw shell output, not JSON', () => {
 		for (const key of AGENT_ENV_KEYS) delete process.env[key];
 		const path = tmp_env('SAFE=hello world');
 		const out = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -85,12 +100,102 @@ describe('load_command', () => {
 			.spyOn(console, 'error')
 			.mockImplementation(() => {});
 
-		load_command(path, undefined, false, true, 'bash');
+		load_command(path, undefined, false, true, 'bash', true);
 
 		expect(out).toHaveBeenCalledWith("export SAFE='hello world'");
 		expect(err).toHaveBeenCalledWith(
 			expect.stringContaining('Emitted bash shell assignments'),
 		);
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
+	it('fails closed for shell output without explicit opt-in', () => {
+		for (const key of AGENT_ENV_KEYS) delete process.env[key];
+		const path = tmp_env('SAFE=secret-value');
+		const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new Error(`exit:${code}`);
+		});
+
+		expect(() =>
+			load_command(path, undefined, false, true, 'bash'),
+		).toThrow('exit:1');
+		expect(String(out.mock.calls[0][0])).not.toContain(
+			'secret-value',
+		);
+		expect(JSON.parse(String(out.mock.calls[0][0]))).toMatchObject({
+			contains_values: false,
+		});
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
+	it('rejects value output in known agent sessions despite opt-in', () => {
+		for (const key of AGENT_ENV_KEYS) delete process.env[key];
+		process.env.PI_CODING_AGENT = 'true';
+		const path = tmp_env('SAFE=secret-value');
+		const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new Error(`exit:${code}`);
+		});
+
+		expect(() =>
+			load_command(path, undefined, false, true, 'bash', true),
+		).toThrow('exit:1');
+		expect(String(out.mock.calls[0][0])).not.toContain(
+			'secret-value',
+		);
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
+	it('validates disclosure policy before persist side effects', () => {
+		for (const key of AGENT_ENV_KEYS) delete process.env[key];
+		const root = join(
+			tmpdir(),
+			`nopeek-persist-test-${randomBytes(4).toString('hex')}`,
+		);
+		process.env.XDG_CONFIG_HOME = root;
+		const path = tmp_env('SENTINEL_DO_NOT_LEAK=secret-value');
+		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new Error(`exit:${code}`);
+		});
+
+		expect(() =>
+			load_command(path, undefined, true, true, 'bash'),
+		).toThrow('exit:1');
+		expect(existsSync(join(root, 'nopeek', 'config.json'))).toBe(
+			false,
+		);
+		rmSync(root, { recursive: true, force: true });
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
+	it('keeps regular non-JSON output name-only without opt-in', () => {
+		for (const key of AGENT_ENV_KEYS) delete process.env[key];
+		const path = tmp_env('SAFE=secret-value');
+		const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		load_command(path, undefined, false, false);
+
+		expect(out).not.toHaveBeenCalled();
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
+	it('allows explicitly opted-in exports in an interactive shell', () => {
+		for (const key of AGENT_ENV_KEYS) delete process.env[key];
+		const path = tmp_env('SAFE=secret-value');
+		const out = vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		Object.defineProperty(process.stdout, 'isTTY', {
+			value: true,
+			configurable: true,
+		});
+
+		load_command(path, undefined, false, false, undefined, true);
+
+		expect(out).toHaveBeenCalledWith('export SAFE=secret-value');
+		delete (process.stdout as { isTTY?: boolean }).isTTY;
 		rmSync(join(path, '..'), { recursive: true, force: true });
 	});
 
@@ -107,13 +212,13 @@ describe('load_command', () => {
 			next_command: string;
 			message: string;
 		};
-		expect(payload.method).toBe('export');
+		expect(payload.method).toBe('name_only');
 		expect(payload.available_to_future_commands).toBe(false);
 		expect(payload.next_command).toContain('eval "$(nopeek load ');
-		expect(payload.next_command).toContain(' --shell bash)"');
-		expect(payload.message).toContain(
-			'Shell exports were printed only',
+		expect(payload.next_command).toContain(
+			' --shell bash --allow-values)"',
 		);
+		expect(payload.message).toContain('Name-only output was used');
 		rmSync(join(path, '..'), { recursive: true, force: true });
 	});
 });

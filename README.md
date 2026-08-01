@@ -69,18 +69,18 @@ Those are optional defense-in-depth features, not capabilities of the
 standalone nopeek CLI. nopeek remains harness-agnostic and works
 anywhere when you mention it in the session.
 
-`load` has three environment-dependent modes:
+`load` reports one of four methods:
 
 | Method        | Context                                      | Availability                                                                     |
 | ------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
 | `env_file`    | Harness exposes an env-file injection target | Future commands in that session can use the variables                            |
 | `source_file` | Agent session without env-file injection     | A `0600` temp file is created; variables exist only in the shell that sources it |
-| `export`      | Regular shell                                | Assignments are printed; variables exist only if the parent shell evaluates them |
+| `name_only`   | Regular default                              | Only key names are reported; no assignments or values are emitted                |
+| `export`      | Non-JSON output with `--allow-values`        | Assignments are printed; variables exist only if the parent shell evaluates them |
 
 `load` reports its method and whether future commands can see the
-variables. It cannot mutate a parent shell. With `source_file` or
-`export`, consume the reported command in the same shell as the
-secret-dependent command, or prefer `nopeek run`.
+variables. It cannot mutate a parent shell. Prefer `nopeek run` or use
+the reported safe next step.
 
 ## Usage
 
@@ -105,7 +105,7 @@ shell assignments require extra care, as described below.
 ```bash
 npx nopeek load .env
 npx nopeek load .env --only DATABASE_URL,API_KEY
-npx nopeek load .env --shell bash  # eval/source-safe shell output
+npx nopeek load .env --shell bash --allow-values  # trusted shells only
 npx nopeek load .env --persist  # also save to config for future sessions
 npx nopeek load terraform.tfvars --only prod_password
 npx nopeek load production.tfvars.json --only db_password
@@ -125,24 +125,26 @@ Maps, lists, numbers, and booleans are skipped.
 The `--persist` flag saves keys to `~/.config/nopeek/config.json` so a
 SessionStart hook can auto-inject them on future sessions.
 
-`load` returns a `method` field in JSON output. If `method` is
-`env_file`, the keys are available to future session commands. If
-`method` is `export` or `source_file`, the keys are not available
-until you evaluate the returned `next_command`, for example:
+`load` returns `method` and `contains_values` fields in JSON output.
+Structured JSON never contains values. If `method` is `env_file`, keys
+are available to future session commands. `source_file` returns a safe
+path to source; `name_only` may return an explicitly gated
+`next_command`, for example:
 
 ```bash
-eval "$(npx nopeek load .env --shell bash)"
-source <(npx nopeek load .env --shell bash)
-npx nopeek load .env --shell fish | source
+eval "$(npx nopeek load .env --shell bash --allow-values)"
+source <(npx nopeek load .env --shell bash --allow-values)
+npx nopeek load .env --shell fish --allow-values | source
 ```
 
-`--shell` supports `bash`, `zsh`, and `fish`. It deliberately writes
-assignments containing secret values to stdout for a shell to consume;
-status/progress messages go to stderr. Do not run this mode as a plain
-agent tool call where stdout will enter conversation context. Pipe or
-evaluate it directly in a trusted shell. Likewise, output modes that
-print exports (including regular-shell non-JSON use) are not
-value-hiding modes.
+`--shell` supports `bash`, `zsh`, and `fish`, but assignment output
+requires the explicit `--allow-values` opt-in. `--shell` takes
+precedence over `--json`: that combination emits raw shell
+assignments, not JSON. This mode warns on stderr and writes secret
+values to stdout for a shell to consume. Detected LLM agent sessions
+reject `--allow-values`; use `run`, env-file injection, or the
+generated source file instead. Without opt-in, non-JSON output is
+name-only even in unknown non-TTY harnesses.
 
 ### `run` - Run one command with loaded secrets
 
