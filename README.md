@@ -170,9 +170,16 @@ npx nopeek set MY_API_KEY --from-env  # read from current shell env
 npx nopeek set MY_API_KEY             # interactive prompt (TTY only)
 ```
 
-Stores to `~/.config/nopeek/config.json` with `0600` permissions. This
-is plaintext at rest; use `set`/`--persist` only for secrets you are
-comfortable storing in your user config.
+Stores to `~/.config/nopeek/config.json` with `0600` permissions
+inside an owned `0700` directory. nopeek rejects symlinks, wrong
+ownership, non-regular files, corrupt JSON, and invalid config
+structure without overwriting the original. Missing config reads do
+not create directories. Safe owned permission drift is repaired
+through verified file descriptors, and destinations are revalidated
+immediately before atomic replacement. These checks do not protect
+against a process running as the same user racing the final filesystem
+operation. This is plaintext at rest; use `set`/`--persist` only for
+secrets you are comfortable storing in your user config.
 
 > **Note:** `--value` is rejected inside detected LLM agent sessions.
 > The value would appear in the conversation. Use `--from-env`
