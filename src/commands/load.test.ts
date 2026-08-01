@@ -84,9 +84,11 @@ describe('load_command', () => {
 		};
 		expect(payload.method).toBe('source_file');
 		expect(payload.available_to_future_commands).toBe(false);
-		expect(payload.source_path).toContain('/nopeek/env-');
+		expect(payload.source_path).toContain(
+			`/nopeek-${process.getuid?.()}/env-`,
+		);
 		expect(payload.next_command).toBe(
-			`source ${payload.source_path}`,
+			`if source ${payload.source_path}; then :; else (status=$?; rm -f ${payload.source_path}; exit "$status"); fi`,
 		);
 		rmSync(join(path, '..'), { recursive: true, force: true });
 		rmSync(payload.source_path, { force: true });

@@ -1,7 +1,9 @@
-import { randomBytes } from 'node:crypto';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { appendFileSync } from 'node:fs';
+import {
+	type TempEnvFile,
+	type TempEnvOptions,
+	write_temp_env_file,
+} from './temp-env.js';
 
 const AGENT_MARKERS = [
 	'CLAUDE_ENV_FILE',
@@ -47,22 +49,12 @@ export function inject_env(key: string, value: string): void {
 
 export function write_nopeek_env(
 	exports: { key: string; value: string }[],
-): string {
+	options?: TempEnvOptions,
+): TempEnvFile {
 	for (const { key } of exports) {
 		assert_valid_key(key);
 	}
-	const dir = join(tmpdir(), 'nopeek');
-	mkdirSync(dir, { recursive: true, mode: 0o700 });
-	const path = join(dir, `env-${randomBytes(8).toString('hex')}.sh`);
-	const content = exports
-		.map(({ key, value }) => `export ${key}=${shell_escape(value)}`)
-		.join('\n');
-	writeFileSync(path, content + '\n', {
-		encoding: 'utf-8',
-		mode: 0o600,
-		flag: 'wx',
-	});
-	return path;
+	return write_temp_env_file(exports, options);
 }
 
 export type Shell = 'bash' | 'zsh' | 'fish';

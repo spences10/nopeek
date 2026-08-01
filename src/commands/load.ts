@@ -106,6 +106,7 @@ export function load_command(
 
 	let method: string;
 	let source_path: string | undefined;
+	let stale_files_removed = 0;
 
 	if (has_session_env_file()) {
 		for (const { key, value } of selected) {
@@ -113,7 +114,9 @@ export function load_command(
 		}
 		method = 'env_file';
 	} else if (in_agent_session) {
-		source_path = write_nopeek_env(selected);
+		const temp_env = write_nopeek_env(selected);
+		source_path = temp_env.path;
+		stale_files_removed = temp_env.stale_files_removed;
 		method = 'source_file';
 	} else {
 		method = allow_values && !json ? 'export' : 'name_only';
@@ -132,8 +135,8 @@ export function load_command(
 	);
 
 	if (!json) {
-		if (method === 'source_file') {
-			console.log(`source ${source_path}`);
+		if (method === 'source_file' && source_path) {
+			console.log(source_command_for(source_path));
 		} else if (method === 'export') {
 			warning(
 				'Secret values are being emitted to stdout. Consume this output only in a trusted shell.',
@@ -154,6 +157,9 @@ export function load_command(
 				info(`Next step: ${next_command}`);
 			}
 		}
+		if (stale_files_removed > 0) {
+			info(`Removed ${stale_files_removed} stale temp env file(s).`);
+		}
 		if (persist) {
 			success(
 				`${selected.length} key(s) saved to plaintext nopeek config for future sessions.`,
@@ -171,6 +177,7 @@ export function load_command(
 		file,
 		available_to_future_commands: method === 'env_file',
 		contains_values: false,
+		stale_files_removed,
 		message: availability,
 	};
 	if (method !== 'env_file') {
@@ -194,13 +201,18 @@ function next_command_for(
 ): string | undefined {
 	if (method === 'env_file' || method === 'export') return undefined;
 	if (method === 'source_file' && source_path)
-		return `source ${shell_escape(source_path)}`;
+		return source_command_for(source_path);
 
 	const args = [shell_escape(file)];
 	if (only) args.push('--only', shell_escape(only));
 	if (persist) args.push('--persist');
 	args.push('--shell', 'bash', '--allow-values');
 	return `eval "$(nopeek load ${args.join(' ')})"`;
+}
+
+function source_command_for(path: string): string {
+	const escaped = shell_escape(path);
+	return `if source ${escaped}; then :; else (status=$?; rm -f ${escaped}; exit "$status"); fi`;
 }
 
 function availability_message_for(

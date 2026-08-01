@@ -178,7 +178,7 @@ describe('shell_export_line', () => {
 
 describe('write_nopeek_env', () => {
 	it('writes exports to a temp file with 0600 perms', () => {
-		const path = write_nopeek_env([
+		const { path } = write_nopeek_env([
 			{ key: 'FOO', value: 'bar' },
 			{ key: 'BAZ', value: 'hello world' },
 		]);
@@ -199,7 +199,7 @@ describe('write_nopeek_env', () => {
 	});
 
 	it('shell-escapes special characters', () => {
-		const path = write_nopeek_env([
+		const { path } = write_nopeek_env([
 			{
 				key: 'DB',
 				value: "postgres://u:p@host/db?x=1&y='2'",

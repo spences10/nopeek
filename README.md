@@ -74,7 +74,7 @@ anywhere when you mention it in the session.
 | Method        | Context                                      | Availability                                                                     |
 | ------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
 | `env_file`    | Harness exposes an env-file injection target | Future commands in that session can use the variables                            |
-| `source_file` | Agent session without env-file injection     | A `0600` temp file is created; variables exist only in the shell that sources it |
+| `source_file` | Agent session without env-file injection     | A self-removing `0600` file in a verified per-user `0700` root is created        |
 | `name_only`   | Regular default                              | Only key names are reported; no assignments or values are emitted                |
 | `export`      | Non-JSON output with `--allow-values`        | Assignments are printed; variables exist only if the parent shell evaluates them |
 
@@ -325,9 +325,15 @@ Additional limitations:
 - **Agent detection is marker-based.** An unknown harness may be
   treated like a regular shell; check `nopeek status` and avoid
   assignment-emitting modes in agent-visible output.
-- **Temp files remain on disk.** `source_file` writes values under
-  `/tmp/nopeek/` with `0600` permissions; nopeek does not currently
-  remove them automatically.
+- **Temp files are briefly plaintext.** `source_file` writes values to
+  a unique `0600` file under the verified per-user `0700` directory
+  `<os.tmpdir()>/nopeek-<uid>/`. The file removes itself after it is
+  sourced; interrupted-session files older than 24 hours are removed
+  safely on a later write, with only the removal count reported.
+  nopeek refuses unsafe roots and never follows symlinks during
+  cleanup. Files created by older versions under `/tmp/nopeek/` are
+  intentionally not touched; inspect and remove that legacy directory
+  manually after upgrading.
 - **Persisted keys are plaintext.** `set` and `load --persist` store
   values in `~/.config/nopeek/config.json` with `0600` permissions.
 - **Redaction is separate and best-effort.** Standalone nopeek does
