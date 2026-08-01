@@ -3,7 +3,11 @@ import { rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { status_command } from './status.js';
+
+const scan_all = vi.fn();
+vi.mock('../detectors/index.js', () => ({ scan_all }));
+
+const { status_command } = await import('./status.js');
 
 const AGENT_ENV_KEYS = [
 	'CLAUDE_ENV_FILE',
@@ -23,9 +27,11 @@ describe('status_command', () => {
 	afterEach(() => {
 		process.env = { ...original_env };
 		vi.restoreAllMocks();
+		scan_all.mockReset();
 	});
 
 	it('reports name_only and value-free output outside agent sessions', async () => {
+		scan_all.mockResolvedValue([]);
 		for (const key of AGENT_ENV_KEYS) delete process.env[key];
 		const config_root = join(
 			tmpdir(),
