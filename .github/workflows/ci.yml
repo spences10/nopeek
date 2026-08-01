@@ -35,5 +35,45 @@ jobs:
       - name: Run portable security integration tests
         run: pnpm run test:integration
 
-      - name: Verify CLI works
-        run: node dist/index.js --help
+      - name: Verify packed CLI works
+        shell: bash
+        run: |
+          archive="$(npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP")"
+          install_dir="$RUNNER_TEMP/nopeek-packed"
+          npm install --ignore-scripts --no-audit --no-package-lock --prefix "$install_dir" "$RUNNER_TEMP/$archive"
+          node "$install_dir/node_modules/nopeek/dist/index.js" --help
+
+  supported-shell-security:
+    name: Security integration (bash, zsh, fish)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install supported shells
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes zsh fish
+
+      - name: Require every supported shell
+        shell: bash
+        run: |
+          for supported_shell in bash zsh fish; do
+            command -v "$supported_shell" >/dev/null || {
+              echo "Required shell is unavailable: $supported_shell" >&2
+              exit 1
+            }
+          done
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run built-CLI shell security tests
+        run: pnpm run test:integration

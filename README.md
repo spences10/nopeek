@@ -98,6 +98,31 @@ The safe default for an LLM coding session is `run`, or `load` when
 `status` confirms env-file injection is available. Commands that emit
 shell assignments require extra care, as described below.
 
+### Installation trust
+
+`npx nopeek` is convenient for evaluation, but npm may download code
+when the requested package is not already available locally. For
+production-secret work, prefer a reviewed exact version in a trusted
+project lockfile:
+
+```bash
+pnpm add --save-exact nopeek@0.0.15
+pnpm install --frozen-lockfile
+pnpm exec nopeek run .env --only API_KEY -- your-command
+```
+
+After the package is present in pnpm's local store, a locked checkout
+can use `pnpm install --offline --frozen-lockfile` followed by
+`pnpm exec nopeek ...`. A compromised package, dependency, shell,
+child process, or user account is outside nopeek's protection.
+
+npm trusted-publishing provenance is not currently enabled because
+this repository uses a maintainer-run Changesets publish command
+rather than an OIDC release workflow. CI instead builds, installs, and
+executes the packed artifact to catch packaging regressions;
+provenance should only be enabled alongside a reviewed
+trusted-publishing workflow.
+
 ## Commands
 
 ### `load` - Load secrets from .env or .tfvars files
@@ -421,8 +446,11 @@ pnpm run test:integration
 The integration suite executes the built CLI in isolated home, config,
 temporary, env-file, and working directories. Bash is required for the
 portable CI subset. Zsh and fish assignment tests run when those
-shells are installed and otherwise appear as explicit skips; POSIX
-permission checks are likewise platform-dependent. Tests use synthetic
+shells are installed and otherwise appear as explicit skips. A
+separate Ubuntu release-gating job installs and requires bash, zsh,
+and fish, then runs the built-CLI assignment round-trip and canary
+assertions for all three; a missing supported shell fails that job.
+POSIX permission checks remain platform-dependent. Tests use synthetic
 canaries, timeouts, and cleanup rather than real credentials.
 
 The `run` tests distinguish nopeek output from deliberate child

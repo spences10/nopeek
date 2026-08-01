@@ -169,6 +169,43 @@ afterEach(() => {
 });
 
 describe('built CLI security boundaries', () => {
+	it('fails closed to name-only JSON in an unknown non-TTY harness', () => {
+		const h = harness();
+		const loaded = h.run(['load', h.env_file]);
+
+		expect(loaded.status).toBe(0);
+		expect_canary_absent(loaded, h.canary);
+		const payload = JSON.parse(String(loaded.stdout)) as {
+			method: string;
+			contains_values: boolean;
+			available_to_future_commands: boolean;
+			persisted: boolean;
+		};
+		expect(payload).toMatchObject({
+			method: 'name_only',
+			contains_values: false,
+			available_to_future_commands: false,
+			persisted: false,
+		});
+		expect(existsSync(join(h.root, 'config'))).toBe(false);
+		expect(readdirSync(join(h.root, 'tmp'))).toEqual([]);
+	});
+
+	it('fails closed to name-only text in an unknown non-TTY harness', () => {
+		const h = harness();
+		const loaded = h.run(['load', h.env_file, '--no-json']);
+
+		expect(loaded.status).toBe(0);
+		expect(String(loaded.stdout)).toBe('');
+		expect(String(loaded.stderr)).toContain('SECRET');
+		expect(String(loaded.stderr)).toContain(
+			'not available to future commands',
+		);
+		expect_canary_absent(loaded, h.canary);
+		expect(existsSync(join(h.root, 'config'))).toBe(false);
+		expect(readdirSync(join(h.root, 'tmp'))).toEqual([]);
+	});
+
 	it('requires assignment opt-in and rejects it in detected agents', () => {
 		const h = harness();
 		const denied = h.run(['load', h.env_file, '--shell', 'bash']);
