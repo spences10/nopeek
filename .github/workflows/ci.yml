@@ -26,11 +26,14 @@ jobs:
       - name: Check (lint + format)
         run: pnpm run check
 
-      - name: Run tests
-        run: pnpm run test
-
       - name: Build
         run: pnpm run build
+
+      - name: Run unit tests
+        run: pnpm run test
+
+      - name: Run portable security integration tests
+        run: pnpm run test:integration
 
       - name: Verify CLI works
         run: node dist/index.js --help

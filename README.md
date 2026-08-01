@@ -223,14 +223,31 @@ Shows key names and sources without values.
 npx nopeek remove MY_API_KEY
 ```
 
-### `init` - Scan and configure cloud CLIs
+### `init` - Audit cloud CLI authentication
 
 ```bash
 npx nopeek init
 ```
 
-Detects installed cloud CLIs, checks their auth configuration, and
-stores profile mappings.
+Detects installed cloud CLIs and reports whether their current
+authentication needs migration. This command is advisory: it does not
+change cloud CLI configuration, and `run`/`load` do not apply cloud
+profiles. Older nopeek versions stored unused profile mappings;
+running `init` removes those obsolete entries without affecting
+credentials or the cloud CLIs themselves.
+
+For a reported migration, configure the relevant CLI directly, remove
+the inline credential from your shell startup files, open a fresh
+shell, and rerun `nopeek init`:
+
+- AWS: `aws configure --profile <name>`, then set
+  `AWS_PROFILE=<name>`.
+- hcloud: `hcloud context create <name>`, then use
+  `hcloud context use <name>`.
+- gcloud: `gcloud config configurations create <name>`, then use
+  `gcloud config configurations activate <name>`.
+- Azure: sign in with `az login`; select the account with
+  `az account set --subscription <name-or-id>`.
 
 | CLI      | Safer pattern                                        | Detection                                          |
 | -------- | ---------------------------------------------------- | -------------------------------------------------- |
@@ -245,7 +262,10 @@ stores profile mappings.
 npx nopeek status
 ```
 
-Shows session type, stored keys, CLI profiles, and detected CLIs.
+Shows session type, stored keys, and detected CLIs. A legacy
+`CLI profiles` section may appear until `nopeek init` removes mappings
+written by older versions; those mappings are never applied to
+commands.
 
 ### `audit` - Scan for exposed secrets
 
@@ -390,6 +410,25 @@ Additional limitations:
   not redact arbitrary child output. Harness integrations such as
   my-pi may add a separate safety net, but cannot guarantee complete
   redaction.
+
+## Security integration tests
+
+```bash
+pnpm run build
+pnpm run test:integration
+```
+
+The integration suite executes the built CLI in isolated home, config,
+temporary, env-file, and working directories. Bash is required for the
+portable CI subset. Zsh and fish assignment tests run when those
+shells are installed and otherwise appear as explicit skips; POSIX
+permission checks are likewise platform-dependent. Tests use synthetic
+canaries, timeouts, and cleanup rather than real credentials.
+
+The `run` tests distinguish nopeek output from deliberate child
+output. A child explicitly instructed to print its injected
+environment can print a canary; that controlled child channel is
+outside nopeek's normal-output secrecy guarantee.
 
 ## License
 

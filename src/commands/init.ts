@@ -9,18 +9,15 @@ export async function init_command(json?: boolean): Promise<void> {
 
 	const results = await scan_all();
 
-	// Store detected profiles in config
+	// Profile mappings were persisted by older versions, but no command ever
+	// consumed them. Keep config-file compatibility while removing that dead
+	// state the next time the advisory scan runs.
 	const config = read_config();
-	let stored = 0;
-
-	for (const r of results) {
-		if (r.status === 'ok' && r.profile && r.env_var) {
-			config.cli_profiles[r.name] = { profile: r.profile };
-			stored++;
-		}
-	}
-
-	if (stored > 0) {
+	const removed_legacy_profiles = Object.keys(
+		config.cli_profiles,
+	).length;
+	if (removed_legacy_profiles > 0) {
+		config.cli_profiles = {};
 		write_config(config);
 	}
 
@@ -36,7 +33,8 @@ export async function init_command(json?: boolean): Promise<void> {
 			detail: r.detail,
 			profile: r.profile || null,
 		})),
-		stored,
+		advisory: true,
+		removed_legacy_profiles,
 		migrations,
 	};
 
@@ -57,9 +55,11 @@ export async function init_command(json?: boolean): Promise<void> {
 			found(`${r.name}${version_str} — ${r.detail} ${status_tag}`);
 		}
 
-		if (stored > 0) {
+		if (removed_legacy_profiles > 0) {
 			console.error('');
-			success(`${stored} CLI profile(s) saved to nopeek config`);
+			success(
+				`${removed_legacy_profiles} obsolete CLI profile mapping(s) removed`,
+			);
 		}
 
 		if (migrations.length > 0) {

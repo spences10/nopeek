@@ -4,7 +4,7 @@ import { init_command } from './init.js';
 export default defineCommand({
 	meta: {
 		name: 'init',
-		description: 'Scan for cloud CLIs and configure secure auth',
+		description: 'Audit cloud CLI authentication (advisory)',
 	},
 	args: {
 		json: {

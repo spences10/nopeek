@@ -11,7 +11,7 @@ const pkg = JSON.parse(
 );
 
 const WORKFLOW_SECTION = `Workflow:
-  1. npx nopeek init          Detect cloud CLIs, configure profiles
+  1. npx nopeek init          Audit cloud CLI authentication
   2. npx nopeek load .env     Inject .env secrets into session
   3. npx nopeek run .env -- cmd  Run one command with loaded secrets
   4. npx nopeek status        Verify session state and loaded keys
@@ -20,7 +20,7 @@ const WORKFLOW_SECTION = `Workflow:
 const CONCEPTS_SECTION = `Concepts:
   Key       A secret name (e.g. DATABASE_URL). Values never appear in output.
   Source    Where the key came from: "set" (manual), "load" (from file).
-  Profile   A named CLI auth config (e.g. AWS_PROFILE) — no inline creds.
+  Profile   A named auth config managed directly by its cloud CLI.
   Session   LLM coding agent session detected via env-file injection or known agent markers.`;
 
 const EXAMPLES_SECTION = `Examples:
