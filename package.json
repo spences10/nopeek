@@ -1,6 +1,6 @@
 {
 	"name": "nopeek",
-	"version": "0.0.15",
+	"version": "0.0.16",
 	"description": "CLI for reducing accidental secret disclosure in LLM coding sessions",
 	"keywords": [
 		"agents",

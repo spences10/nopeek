@@ -1,5 +1,28 @@
 # nopeek
 
+## 0.0.16
+
+### Patch Changes
+
+- 38fcea2: Harden CLI security through adversarial integration tests
+  and advisory cloud authentication initialization and migration
+  guidance.
+- 4059272: Document trusted installs, verify packed releases, and gate
+  unknown-harness and supported-shell security regressions in CI.
+- c559f33: Expand audit coverage with Git-aware classification, tfvars
+  discovery, example detection, and bounded heuristic reporting
+  safeguards.
+- 9bf2edb: Secure temporary environment files with private
+  directories, self-cleanup, stale cleanup, and concurrency-safe
+  lifecycle protections throughout.
+- c699350: Fail closed by default for secret assignment output,
+  requiring explicit opt-in outside detected agent sessions.
+- a696a54: Harden config integrity with schema validation, secure
+  permissions, symlink rejection, actionable errors, and atomic
+  writes.
+- 5cb5c4d: Strictly parse dotenv and tfvars files, rejecting malformed
+  syntax, duplicates, collisions, and unsafe output names.
+
 ## 0.0.15
 
 ### Patch Changes
