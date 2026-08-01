@@ -14,7 +14,10 @@ interface Token {
  * All other HCL expressions are rejected rather than interpreted partially.
  */
 export function parse_tfvars_file(path: string): EnvEntry[] {
-	const content = readFileSync(path, 'utf-8');
+	return parse_tfvars_content(readFileSync(path, 'utf-8'));
+}
+
+export function parse_tfvars_content(content: string): EnvEntry[] {
 	if (content.startsWith('\uFEFF')) {
 		throw syntax_error('UTF-8 BOM is unsupported', 1);
 	}
@@ -204,9 +207,13 @@ function tokenize_tfvars(content: string): Token[] {
  * key collisions are rejected.
  */
 export function parse_tfvars_json_file(path: string): EnvEntry[] {
-	return new StrictJsonTfvarsParser(
-		readFileSync(path, 'utf-8'),
-	).parse();
+	return parse_tfvars_json_content(readFileSync(path, 'utf-8'));
+}
+
+export function parse_tfvars_json_content(
+	content: string,
+): EnvEntry[] {
+	return new StrictJsonTfvarsParser(content).parse();
 }
 
 class StrictJsonTfvarsParser {

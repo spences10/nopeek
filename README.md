@@ -254,9 +254,26 @@ npx nopeek audit
 npx nopeek audit ./path/to/dir
 ```
 
-Scans for `.env` files and reports secrets found using pattern
-matching (AWS keys, bearer tokens, API keys, private keys, connection
-strings, etc.). Checks `.gitignore` coverage.
+Recursively scans `.env*`, `.tfvars`, and `.tfvars.json` files and
+reports pattern categories (AWS keys, bearer tokens, API keys, private
+keys, connection strings, etc.) without printing matched values. It
+uses Git itself for nested `.gitignore` rules and negation, and
+reports each source as `tracked`, `untracked`, `ignored`, or
+`unknown`. `unknown` is used outside a repository, when Git is
+unavailable, or when classification fails. Example, sample, and
+template files are not assumed safe: files whose parsed values look
+live or whose contents match known secret patterns are flagged, while
+a narrow set of obvious whole-value placeholders is reported as a
+heuristic placeholder assessment.
+
+The scan is a bounded heuristic, not proof that a repository is safe.
+It does not follow symlinks; skips dependency, build, VCS metadata,
+and framework output directories; visits at most 10,000 directories to
+a depth of 32; examines at most 1,000 candidates; and reads at most 1
+MiB per file. Unreadable, binary, oversized, malformed, symlinked, or
+limit-exceeding candidates are reported without source contents and
+make the scan fail closed. Only supported secret-source filenames and
+known secret patterns are checked.
 
 ## Security
 
@@ -351,8 +368,10 @@ nopeek does **not** protect secrets from:
 
 Additional limitations:
 
-- **Pattern-based secret detection is best-effort.** `audit` scans
-  `.env` files for known patterns and cannot identify every secret.
+- **Pattern-based secret detection is best-effort.** `audit` performs
+  a bounded scan of `.env*`, `.tfvars`, and `.tfvars.json` sources for
+  known patterns and cannot identify every secret or prove a file
+  safe.
 - **Agent detection is marker-based.** An unknown harness may be
   treated like a regular shell; check `nopeek status` and avoid
   assignment-emitting modes in agent-visible output.

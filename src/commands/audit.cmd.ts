@@ -5,7 +5,7 @@ export default defineCommand({
 	meta: {
 		name: 'audit',
 		description:
-			'Scan current directory for exposed secrets in .env files',
+			'Scan .env and tfvars files with bounded secret and Git-state heuristics',
 	},
 	args: {
 		path: {

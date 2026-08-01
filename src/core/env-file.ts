@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import {
+	parse_tfvars_content,
 	parse_tfvars_file,
+	parse_tfvars_json_content,
 	parse_tfvars_json_file,
 } from './tfvars-file.js';
 
@@ -16,6 +18,16 @@ export function parse_file(path: string): EnvEntry[] {
 	return parse_env_file(path);
 }
 
+export function parse_content(
+	path: string,
+	content: string,
+): EnvEntry[] {
+	if (path.endsWith('.tfvars.json'))
+		return parse_tfvars_json_content(content);
+	if (path.endsWith('.tfvars')) return parse_tfvars_content(content);
+	return parse_env_content(content);
+}
+
 /**
  * Supported dotenv syntax: blank/comment lines and optional `export` followed
  * by NAME=VALUE. Names match [A-Za-z_][A-Za-z0-9_]*. Values may be unquoted,
@@ -25,7 +37,10 @@ export function parse_file(path: string): EnvEntry[] {
  * are intentionally unsupported.
  */
 export function parse_env_file(path: string): EnvEntry[] {
-	const content = readFileSync(path, 'utf-8');
+	return parse_env_content(readFileSync(path, 'utf-8'));
+}
+
+export function parse_env_content(content: string): EnvEntry[] {
 	if (content.startsWith('\uFEFF'))
 		throw env_error('UTF-8 BOM is unsupported', 1);
 	const entries: EnvEntry[] = [];
