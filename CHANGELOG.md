@@ -1,5 +1,13 @@
 # nopeek
 
+## 0.0.17
+
+### Patch Changes
+
+- cc75a92: Prevent session-wide secret injection, disable global
+  credential auto-loading, and add cross-agent security guidance and
+  tests.
+
 ## 0.0.16
 
 ### Patch Changes
