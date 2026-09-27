@@ -10,25 +10,17 @@ by the loading step.
 
 ## Quick Start
 
-For Pi and other harnesses where each tool call starts a fresh shell,
-use `run` so loading and execution happen in one child process:
+Tell your coding agent:
 
-```text
-"use npx nopeek run .env --only DATABASE_URL -- sh -c 'psql \"$DATABASE_URL\" -c \"SELECT count(*) FROM users\"'"
+> Use npx nopeek if you need keys.
 
-"use npx nopeek run .env --only STRIPE_KEY -- sh -c 'curl -H \"Authorization: Bearer $STRIPE_KEY\" https://api.example.com'"
-```
+Swap `npx` for `pnpx` or `bunx` if that's what you use. The agent
+handles the commands and key selection—you don't need to.
 
-`run` reports no secret values itself. The child command can still
-print a secret, so choose commands and flags that do not dump their
-environment, credentials, or verbose authentication data.
-
-If your harness supports persistent env-file injection, `load` can
-make selected variables available to later commands:
-
-```text
-"use npx nopeek load .env --only DATABASE_URL,API_KEY, then use those variables by name"
-```
+For agents and integrations: prefer `run` for each
+credential-dependent command, not session-wide loading. See
+[Usage](#usage) and the
+[security boundaries](#threat-model-and-non-goals).
 
 ## How It Works
 
@@ -38,8 +30,9 @@ provider and retained there. Agents also have a habit of inspecting
 provides a lower-risk path for routine work:
 
 1. It parses the requested secret file locally.
-2. `run` gives selected values only to one child process, or `load`
-   uses the best environment-loading method available.
+2. `run` gives selected values to one child process and its
+   descendants. `load` can prepare a private source file for an
+   explicit shell command.
 3. nopeek's normal status output reports key names and loading state,
    not values.
 
@@ -48,8 +41,8 @@ inaccessible to the agent or to the child command that receives them.
 
 > **Important:** Your agent does not know about nopeek unless you
 > mention it. You do not need to spell out the full command, just
-> mention `{npx,pnpx,bunx} nopeek` and the agent can discover the
-> rest.
+> mention `npx nopeek` (or `pnpx nopeek` / `bunx nopeek`) and the
+> agent can discover the rest.
 
 ### Optional agent reminders
 
@@ -69,14 +62,13 @@ Those are optional defense-in-depth features, not capabilities of the
 standalone nopeek CLI. nopeek remains harness-agnostic and works
 anywhere when you mention it in the session.
 
-`load` reports one of four methods:
+`load` reports one of three methods:
 
-| Method        | Context                                      | Availability                                                                     |
-| ------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
-| `env_file`    | Harness exposes an env-file injection target | Future commands in that session can use the variables                            |
-| `source_file` | Agent session without env-file injection     | A self-removing `0600` file in a verified per-user `0700` root is created        |
-| `name_only`   | Regular default                              | Only key names are reported; no assignments or values are emitted                |
-| `export`      | Non-JSON output with `--allow-values`        | Assignments are printed; variables exist only if the parent shell evaluates them |
+| Method        | Context                                       | Availability                                                                                                                     |
+| ------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `source_file` | Detected agent session, including Claude Code | A self-removing `0600` file in a verified per-user `0700` root is created; source its path only in the shell running the command |
+| `name_only`   | Regular default                               | Only key names are reported; no assignments or values are emitted                                                                |
+| `export`      | Non-JSON output with `--allow-values`         | Assignments are printed; variables exist only if the parent shell evaluates them                                                 |
 
 `load` reports its method and whether future commands can see the
 variables. It cannot mutate a parent shell. Prefer `nopeek run` or use
@@ -84,29 +76,31 @@ the reported safe next step.
 
 ## Usage
 
-No install needed. Your agent runs it directly via `npx`:
+These commands are for the agent to use, not prompts you need to type.
+It can use `npx`, `pnpx`, or `bunx` (`bun x`); `npx` is shown below.
 
 ```bash
 npx nopeek load .env
 npx nopeek load .env --only DATABASE_URL
-npx nopeek run .env --only API_KEY -- sh -c 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com'
+npx nopeek run .env --only API_KEY -- node ./scripts/call-api.js
 npx nopeek set MY_API_KEY --from-env
 npx nopeek status
 ```
 
-The safe default for an LLM coding session is `run`, or `load` when
-`status` confirms env-file injection is available. Commands that emit
-shell assignments require extra care, as described below.
+The recommended default for an LLM coding session is `run`. `load`
+does not make variables available to later tool calls. Commands that
+emit shell assignments require extra care, as described below.
 
 ### Installation trust
 
 `npx nopeek` is convenient for evaluation, but npm may download code
 when the requested package is not already available locally. For
-production-secret work, prefer a reviewed exact version in a trusted
-project lockfile:
+production-secret work, prefer a reviewed exact version containing the
+security fixes below in a trusted project lockfile. Replace the
+version placeholder before running:
 
 ```bash
-pnpm add --save-exact nopeek@0.0.15
+pnpm add --save-exact 'nopeek@<reviewed-version>'
 pnpm install --frozen-lockfile
 pnpm exec nopeek run .env --only API_KEY -- your-command
 ```
@@ -131,7 +125,7 @@ trusted-publishing workflow.
 npx nopeek load .env
 npx nopeek load .env --only DATABASE_URL,API_KEY
 npx nopeek load .env --shell bash --allow-values  # trusted shells only
-npx nopeek load .env --persist  # also save to config for future sessions
+npx nopeek load .env --only API_KEY --persist  # explicit global plaintext storage; no auto-loading
 npx nopeek load terraform.tfvars --only prod_password
 npx nopeek load production.tfvars.json --only db_password
 ```
@@ -171,14 +165,20 @@ filtering or any secret-loading side effect.
   flattened collisions, arrays, numbers, booleans, null, trailing
   content, and a BOM are rejected.
 
-The `--persist` flag saves keys to `~/.config/nopeek/config.json` so a
-SessionStart hook can auto-inject them on future sessions.
+The `--persist` flag requires `--only` with explicit key names and
+saves those keys to `~/.config/nopeek/config.json`. Storage remains
+global, plaintext, and not project-scoped. It does not enable
+automatic loading; `run` reads the requested file, not stored keys.
+`set`, persisted `load`, and `status` with stored keys warn about this
+boundary and older plugins.
 
 `load` returns `method` and `contains_values` fields in JSON output.
-Structured JSON never contains values. If `method` is `env_file`, keys
-are available to future session commands. `source_file` returns a safe
-path to source; `name_only` may return an explicitly gated
-`next_command`, for example:
+Structured JSON never contains values. `available_to_future_commands`
+is always false: the former `env_file` delivery mode has been removed.
+`source_file` returns a path to source in the same shell as the
+command; never inline the file's contents or append it to a session
+env file. `name_only` may return an explicitly gated `next_command`,
+for example:
 
 ```bash
 eval "$(npx nopeek load .env --shell bash --allow-values)"
@@ -191,26 +191,33 @@ requires the explicit `--allow-values` opt-in. `--shell` takes
 precedence over `--json`: that combination emits raw shell
 assignments, not JSON. This mode warns on stderr and writes secret
 values to stdout for a shell to consume. Detected LLM agent sessions
-reject `--allow-values`; use `run`, env-file injection, or the
-generated source file instead. Without opt-in, non-JSON output is
-name-only even in unknown non-TTY harnesses.
+reject `--allow-values`; prefer `run`, or explicitly source the
+generated source file in the shell running your command instead.
+Without opt-in, non-JSON output is name-only even in unknown non-TTY
+harnesses.
 
 ### `run` - Run one command with loaded secrets
 
 ```bash
 npx nopeek run .env --only API_KEY -- node ./script.js
-npx nopeek run .env --only INGEST_TOKEN,FEEDGEN_SERVICE_URL -- sh -c 'curl -H "Authorization: Bearer $INGEST_TOKEN" "$FEEDGEN_SERVICE_URL"'
+npx nopeek run .env --only INGEST_TOKEN,FEEDGEN_SERVICE_URL -- node ./scripts/ingest.js
 npx nopeek run terraform.tfvars --only prod_password -- ./deploy.sh
-npx nopeek run production.tfvars.json --only DATABASE_URL -- sh -c 'psql "$DATABASE_URL" -c "select 1"'
+npx nopeek run production.tfvars.json --only DATABASE_URL -- node ./scripts/query-database.js
 ```
 
-`run` injects selected keys into only the child process environment
-and preserves the child command exit code. Use `sh -c` when you need
-shell expansion, pipes, redirects, or inline `$VARIABLE` expansion
-inside the child process. The child retains normal access to its
-environment and stdout: avoid `env`, `printenv`, shell tracing,
-verbose HTTP authentication, and other behavior that can print
-credentials.
+`run` adds selected keys to the child process environment and
+preserves the child command exit code. Descendants can inherit those
+keys. **`--only` filters the input file, not the inherited parent
+environment.** It neither sanitizes a contaminated session nor reads
+the global key store. Start from a clean session; use native
+environment-based client auth.
+
+Use `sh -c` for pipes or redirects only when needed. Expanding
+`$TOKEN` into a child program's arguments exposes its value in process
+listings, even when the outer command contained only a variable name.
+A child can also disclose values through stdout, stderr, tracing, or
+files. `run` is not an output redactor, environment sandbox, or secret
+broker.
 
 ### `set` - Store a secret key
 
@@ -400,7 +407,7 @@ nopeek is designed for a cooperative coding agent that needs to run a
 command with credentials while avoiding accidental disclosure during
 loading. It protects against common mistakes such as pasting a value
 into chat, reading an entire `.env` file for one key, or printing
-exports as an intermediate step when `run`/env-file injection is used.
+exports as an intermediate step when `run` is used.
 
 nopeek does **not** protect secrets from:
 
@@ -429,12 +436,35 @@ Additional limitations:
   cleanup. Files created by older versions under `/tmp/nopeek/` are
   intentionally not touched; inspect and remove that legacy directory
   manually after upgrading.
-- **Persisted keys are plaintext.** `set` and `load --persist` store
-  values in `~/.config/nopeek/config.json` with `0600` permissions.
+- **Persisted keys are global plaintext.** `set` and
+  `load --persist --only KEY` store values in
+  `~/.config/nopeek/config.json` with `0600` permissions. They are not
+  automatically loaded or project-scoped.
 - **Redaction is separate and best-effort.** Standalone nopeek does
   not redact arbitrary child output. Harness integrations such as
   my-pi may add a separate safety net, but cannot guarantee complete
   redaction.
+
+## Migrating from session-wide loading
+
+Update **both** the CLI and Claude plugin. Updating only the CLI
+cannot stop an older plugin reading global config directly. Disable
+any legacy SessionStart registration, restart affected sessions and
+their child processes, and rotate credentials exposed in tool output
+or transcripts. Removing a stored key does not clear existing
+environments or artifacts. Review and clean up old session env files,
+shell histories, and transcripts without printing their values; nopeek
+does not delete those automatically.
+
+Old `env_file` consumers must switch to `run` or explicitly handle
+`source_file`. Callers of `load --persist` must now supply `--only`.
+No stored data is deleted or automatically migrated. Use `list` and
+`remove KEY` to review and remove obsolete persisted entries.
+
+The [cross-agent security assessment](docs/agent-secret-boundaries.md)
+compares verified sources, explains the remaining boundaries, and
+records which guarantees are tested versus documented by other
+vendors.
 
 ## Security integration tests
 

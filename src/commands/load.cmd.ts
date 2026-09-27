@@ -5,7 +5,7 @@ export default defineCommand({
 	meta: {
 		name: 'load',
 		description:
-			'Load secrets from .env or .tfvars file into session',
+			'Prepare secrets from .env or .tfvars for an explicit shell command (prefer run)',
 	},
 	args: {
 		file: {
@@ -21,7 +21,7 @@ export default defineCommand({
 		persist: {
 			type: 'boolean',
 			description:
-				'Also save keys to nopeek config for future sessions',
+				'Save selected keys to global plaintext config (requires --only; no auto-loading)',
 		},
 		shell: {
 			type: 'enum',

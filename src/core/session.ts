@@ -1,4 +1,3 @@
-import { appendFileSync } from 'node:fs';
 import {
 	type TempEnvFile,
 	type TempEnvOptions,
@@ -13,13 +12,12 @@ const AGENT_MARKERS = [
 	'PI_CODING_AGENT_SESSION_DIR',
 	'MY_PI_RUNTIME_MODE',
 	'CODEX_SANDBOX',
+	'CODEX_THREAD_ID',
+	'CODEX_SESSION_ID',
+	'GEMINI_CLI',
 	'CURSOR_AGENT',
 	'AIDER_MODEL',
 ];
-
-export function has_session_env_file(): boolean {
-	return !!process.env.CLAUDE_ENV_FILE;
-}
 
 export function is_llm_agent_session(): boolean {
 	return AGENT_MARKERS.some((key) => !!process.env[key]);
@@ -32,18 +30,6 @@ export function validate_key(key: string): boolean {
 export function assert_valid_key(key: string): void {
 	if (!validate_key(key)) {
 		throw new Error(`Invalid env key: ${key}`);
-	}
-}
-
-export function inject_env(key: string, value: string): void {
-	assert_valid_key(key);
-	const env_file = process.env.CLAUDE_ENV_FILE;
-	if (env_file) {
-		appendFileSync(
-			env_file,
-			`export ${key}=${shell_escape(value)}\n`,
-			{ mode: 0o600 },
-		);
 	}
 }
 

@@ -1,10 +1,20 @@
 import { createInterface } from 'node:readline';
-import { read_config, write_config } from '../core/config.js';
+import {
+	PERSISTENCE_WARNING,
+	read_config,
+	write_config,
+} from '../core/config.js';
 import {
 	is_llm_agent_session,
 	validate_key,
 } from '../core/session.js';
-import { fail, info, output, success } from '../utils/output.js';
+import {
+	fail,
+	info,
+	output,
+	success,
+	warning,
+} from '../utils/output.js';
 
 interface SetOptions {
 	value?: string;
@@ -73,10 +83,17 @@ function store_key(key: string, value: string, json?: boolean): void {
 
 	if (!json) {
 		success(`${key} stored in plaintext nopeek config`);
+		warning(PERSISTENCE_WARNING);
 		return;
 	}
 	output(
-		{ success: true, key, source: 'set', plaintext_config: true },
+		{
+			success: true,
+			key,
+			source: 'set',
+			plaintext_config: true,
+			persistence_warning: PERSISTENCE_WARNING,
+		},
 		true,
 	);
 }

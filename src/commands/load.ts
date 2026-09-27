@@ -1,9 +1,11 @@
 import { existsSync } from 'node:fs';
-import { read_config, write_config } from '../core/config.js';
+import {
+	PERSISTENCE_WARNING,
+	read_config,
+	write_config,
+} from '../core/config.js';
 import { parse_file, type EnvEntry } from '../core/env-file.js';
 import {
-	has_session_env_file,
-	inject_env,
 	is_llm_agent_session,
 	shell_escape,
 	shell_export_line,
@@ -44,6 +46,13 @@ export function load_command(
 					.filter(Boolean),
 			)
 		: null;
+
+	if (persist && (!filter || filter.size === 0)) {
+		fail(
+			'--persist requires --only with explicit key names; stored keys are global, not project-scoped.',
+			json,
+		);
+	}
 
 	const selected = entries.filter(
 		({ key }) => !filter || filter.has(key),
@@ -98,8 +107,9 @@ export function load_command(
 		);
 		if (persist) {
 			success(
-				`${selected.length} key(s) saved to plaintext nopeek config for future sessions.`,
+				`${selected.length} key(s) saved to plaintext nopeek config.`,
 			);
+			warning(PERSISTENCE_WARNING);
 		}
 		return;
 	}
@@ -108,12 +118,7 @@ export function load_command(
 	let source_path: string | undefined;
 	let stale_files_removed = 0;
 
-	if (has_session_env_file()) {
-		for (const { key, value } of selected) {
-			inject_env(key, value);
-		}
-		method = 'env_file';
-	} else if (in_agent_session) {
+	if (in_agent_session) {
 		const temp_env = write_nopeek_env(selected);
 		source_path = temp_env.path;
 		stale_files_removed = temp_env.stale_files_removed;
@@ -149,21 +154,18 @@ export function load_command(
 		for (const key of keys) {
 			info(`  ${key}`);
 		}
-		if (method === 'env_file') {
-			success(availability);
-		} else {
-			warning(availability);
-			if (next_command) {
-				info(`Next step: ${next_command}`);
-			}
+		warning(availability);
+		if (next_command) {
+			info(`Next step: ${next_command}`);
 		}
 		if (stale_files_removed > 0) {
 			info(`Removed ${stale_files_removed} stale temp env file(s).`);
 		}
 		if (persist) {
 			success(
-				`${selected.length} key(s) saved to plaintext nopeek config for future sessions.`,
+				`${selected.length} key(s) saved to plaintext nopeek config.`,
 			);
+			warning(PERSISTENCE_WARNING);
 		}
 		return;
 	}
@@ -175,13 +177,14 @@ export function load_command(
 		persisted: !!persist,
 		plaintext_config: !!persist,
 		file,
-		available_to_future_commands: method === 'env_file',
+		available_to_future_commands: false,
 		contains_values: false,
 		stale_files_removed,
 		message: availability,
 	};
-	if (method !== 'env_file') {
-		result.warning = availability;
+	result.warning = availability;
+	if (persist) {
+		result.persistence_warning = PERSISTENCE_WARNING;
 	}
 	if (next_command) {
 		result.next_command = next_command;
@@ -199,7 +202,7 @@ function next_command_for(
 	persist?: boolean,
 	source_path?: string,
 ): string | undefined {
-	if (method === 'env_file' || method === 'export') return undefined;
+	if (method === 'export') return undefined;
 	if (method === 'source_file' && source_path)
 		return source_command_for(source_path);
 
@@ -219,11 +222,8 @@ function availability_message_for(
 	method: string,
 	contains_values: boolean,
 ): string {
-	if (method === 'env_file') {
-		return 'Keys were injected into the session env file and are available to future commands.';
-	}
 	if (method === 'source_file') {
-		return 'Env-file injection is unavailable; keys were written to a source file only and are not available until sourced in the shell that runs your command.';
+		return 'Session-wide env-file injection is disabled for secret safety. Prefer nopeek run. Keys are available only after sourcing the generated file in the shell running your command; never copy its contents into a command or session env file.';
 	}
 	if (method === 'export' && contains_values) {
 		return 'Shell exports were printed only; keys are not available to future commands unless you evaluate them in your current shell.';

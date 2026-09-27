@@ -25,6 +25,9 @@ const AGENT_KEYS = [
 	'PI_CODING_AGENT_SESSION_DIR',
 	'MY_PI_RUNTIME_MODE',
 	'CODEX_SANDBOX',
+	'CODEX_THREAD_ID',
+	'CODEX_SESSION_ID',
+	'GEMINI_CLI',
 	'CURSOR_AGENT',
 	'AIDER_MODEL',
 	'BASH_ENV',
@@ -94,7 +97,6 @@ function expect_no_unexpected_canary(
 ): void {
 	const allowed = new Set([
 		'.env',
-		'session.env',
 		'collision.tfvars.json',
 		'config.json',
 	]);
@@ -236,32 +238,243 @@ describe('built CLI security boundaries', () => {
 		() => assignment_round_trip('fish'),
 	);
 
-	it('injects an isolated env file without parent or output disclosure', () => {
+	it.each([false, true])(
+		'never writes CLAUDE_ENV_FILE (persist=%s)',
+		(persist) => {
+			const h = harness();
+			const session_env = join(h.root, 'session.env');
+			writeFileSync(session_env, 'EXISTING=yes\n');
+			const loaded = h.run(
+				[
+					'load',
+					h.env_file,
+					'--only',
+					'SECRET',
+					...(persist ? ['--persist'] : []),
+				],
+				{ ...h.env, CLAUDE_ENV_FILE: session_env },
+			);
+			expect(loaded.status).toBe(0);
+			expect_canary_absent(loaded, h.canary);
+			expect(readFileSync(session_env, 'utf-8')).toBe(
+				'EXISTING=yes\n',
+			);
+			const payload = JSON.parse(String(loaded.stdout));
+			expect(payload).toMatchObject({
+				method: 'source_file',
+				available_to_future_commands: false,
+				contains_values: false,
+			});
+			expect(payload.message).toContain('disabled');
+			const sourced = spawnSync(
+				'bash',
+				['-c', `${payload.next_command} && test -n "$SECRET"`],
+				{
+					env: h.env,
+					encoding: 'utf-8',
+					timeout: TIMEOUT_MS,
+				},
+			);
+			expect(sourced.status).toBe(0);
+			expect_canary_absent(sourced, h.canary);
+			expect(existsSync(payload.source_path)).toBe(false);
+		},
+	);
+
+	it('does not create an absent session env target', () => {
 		const h = harness();
-		const session_env = join(h.root, 'session.env');
-		writeFileSync(session_env, 'EXISTING=yes\n');
+		const target = join(h.root, 'absent', 'session.env');
 		const loaded = h.run(['load', h.env_file], {
 			...h.env,
-			CLAUDE_ENV_FILE: session_env,
-			PI_CODING_AGENT: 'true',
+			CLAUDE_ENV_FILE: target,
 		});
 		expect(loaded.status).toBe(0);
+		expect(existsSync(target)).toBe(false);
 		expect_canary_absent(loaded, h.canary);
-		expect(process.env.SECRET).not.toBe(h.canary);
-		const content = readFileSync(session_env, 'utf-8');
-		expect(content).toContain(h.canary);
-		const sourced = spawnSync(
-			'bash',
+		rmSync(JSON.parse(String(loaded.stdout)).source_path);
+	});
+
+	it.each([undefined, '', ' , '])(
+		'requires explicit --only for persistence (%s)',
+		(only) => {
+			const h = harness();
+			const failed = h.run([
+				'load',
+				h.env_file,
+				'--persist',
+				...(only === undefined ? [] : ['--only', only]),
+			]);
+			expect(failed.status).toBe(1);
+			expect(output(failed)).toContain('--persist requires --only');
+			expect(
+				existsSync(
+					join(h.env.XDG_CONFIG_HOME!, 'nopeek', 'config.json'),
+				),
+			).toBe(false);
+			expect_canary_absent(failed, h.canary);
+		},
+	);
+
+	it('does not load globally persisted keys into another project', () => {
+		const h = harness();
+		const persisted = h.run([
+			'load',
+			h.env_file,
+			'--only',
+			'SECRET',
+			'--persist',
+		]);
+		expect(persisted.status).toBe(0);
+		expect(
+			JSON.parse(String(persisted.stdout)).persistence_warning,
+		).toContain('not project-scoped');
+		const project_b = join(h.root, 'project-b');
+		mkdirSync(project_b);
+		const source_b = join(project_b, '.env');
+		writeFileSync(source_b, 'SAFE=project-b\n');
+		const child = spawnSync(
+			process.execPath,
 			[
-				'-c',
-				`source "$1"; test "$SECRET" = "$2"`,
+				CLI,
+				'run',
+				source_b,
+				'--only',
+				'SAFE',
 				'--',
-				session_env,
-				h.canary,
+				process.execPath,
+				'-e',
+				'process.exit(process.env.SECRET === undefined && process.env.SAFE === "project-b" ? 0 : 1)',
 			],
-			{ env: h.env, encoding: 'utf-8', timeout: TIMEOUT_MS },
+			{
+				cwd: project_b,
+				env: { ...h.env, SECRET: undefined },
+				encoding: 'utf-8',
+				timeout: TIMEOUT_MS,
+			},
 		);
-		expect(sourced.status).toBe(0);
+		expect(child.status).toBe(0);
+		expect_canary_absent(child, h.canary);
+	});
+
+	it.skipIf(process.platform !== 'linux')(
+		'keeps run credentials out of child and nopeek process arguments',
+		() => {
+			const h = harness();
+			const inspect = `const fs = require('node:fs');
+			const value = process.env.SECRET;
+			const args = [process.pid, process.ppid].map(pid => fs.readFileSync('/proc/' + pid + '/cmdline', 'utf8'));
+			process.exit(value && args.every(arg => !arg.includes(value)) ? 0 : 1);`;
+			const child = h.run([
+				'run',
+				h.env_file,
+				'--only',
+				'SECRET',
+				'--',
+				process.execPath,
+				'-e',
+				inspect,
+			]);
+			expect(child.status).toBe(0);
+			expect_canary_absent(child, h.canary);
+			// Positive control: the same probe must catch deliberate child argv exposure.
+			const exposed = h.run([
+				'run',
+				h.env_file,
+				'--only',
+				'SECRET',
+				'--',
+				process.execPath,
+				'-e',
+				inspect,
+				h.canary,
+			]);
+			expect(exposed.status).toBe(1);
+		},
+	);
+
+	it.skipIf(process.platform !== 'linux')(
+		'keeps sourced credentials out of the shell and child arguments',
+		() => {
+			const h = harness();
+			const loaded = h.run(['load', h.env_file, '--only', 'SECRET'], {
+				...h.env,
+				CLAUDE_ENV_FILE: join(h.root, 'session.env'),
+			});
+			expect(loaded.status).toBe(0);
+			const payload = JSON.parse(String(loaded.stdout));
+			const probe = join(h.root, 'probe.cjs');
+			writeFileSync(
+				probe,
+				`const fs = require('node:fs');
+			const value = process.env.SECRET;
+			const args = [process.pid, process.ppid].map(pid => fs.readFileSync('/proc/' + pid + '/cmdline', 'utf8'));
+			process.exit(value && args.every(arg => !arg.includes(value)) ? 0 : 1);`,
+			);
+			const child = spawnSync(
+				'bash',
+				[
+					'--noprofile',
+					'--norc',
+					'-c',
+					`${payload.next_command} && "$1" "$2"; exit $?`,
+					'--',
+					process.execPath,
+					probe,
+				],
+				{
+					env: h.env,
+					encoding: 'utf-8',
+					timeout: TIMEOUT_MS,
+				},
+			);
+			expect(child.status).toBe(0);
+			expect_canary_absent(child, h.canary);
+			expect(existsSync(payload.source_path)).toBe(false);
+			expect(existsSync(join(h.root, 'session.env'))).toBe(false);
+		},
+	);
+
+	it('preserves inherited environment: --only filters the file, not the parent', () => {
+		const h = harness();
+		const child = h.run(
+			[
+				'run',
+				h.env_file,
+				'--only',
+				'SAFE',
+				'--',
+				process.execPath,
+				'-e',
+				'process.exit(process.env.INHERITED_CANARY && process.env.SAFE === "ok" ? 0 : 1)',
+			],
+			{ ...h.env, INHERITED_CANARY: h.canary },
+		);
+		expect(child.status).toBe(0);
+		expect_canary_absent(child, h.canary);
+	});
+
+	it.each([
+		'CLAUDECODE',
+		'CLAUDE_CODE_ENTRYPOINT',
+		'PI_CODING_AGENT',
+		'MY_PI_RUNTIME_MODE',
+		'CODEX_SANDBOX',
+		'CODEX_THREAD_ID',
+		'CODEX_SESSION_ID',
+		'GEMINI_CLI',
+		'CURSOR_AGENT',
+		'AIDER_MODEL',
+	])('refuses value-emitting modes for %s', (marker) => {
+		const h = harness();
+		const env = { ...h.env, [marker]: '1', SYNTHETIC_KEY: h.canary };
+		for (const args of [
+			['load', h.env_file, '--shell', 'bash', '--allow-values'],
+			['set', 'SYNTHETIC_KEY', '--value', h.canary],
+		]) {
+			const denied = h.run(args, env);
+			expect(denied.status).toBe(1);
+			expect_canary_absent(denied, h.canary);
+		}
 	});
 
 	it('creates a private self-removing source fallback with no early inheritance', () => {

@@ -1,34 +1,11 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-	has_session_env_file,
 	is_llm_agent_session,
 	shell_export_line,
 	validate_key,
 	write_nopeek_env,
 } from './session.js';
-
-describe('has_session_env_file', () => {
-	const original = process.env.CLAUDE_ENV_FILE;
-
-	afterEach(() => {
-		if (original) {
-			process.env.CLAUDE_ENV_FILE = original;
-		} else {
-			delete process.env.CLAUDE_ENV_FILE;
-		}
-	});
-
-	it('returns false when CLAUDE_ENV_FILE is not set', () => {
-		delete process.env.CLAUDE_ENV_FILE;
-		expect(has_session_env_file()).toBe(false);
-	});
-
-	it('returns true when CLAUDE_ENV_FILE is set', () => {
-		process.env.CLAUDE_ENV_FILE = '/tmp/test-env';
-		expect(has_session_env_file()).toBe(true);
-	});
-});
 
 describe('is_llm_agent_session', () => {
 	const orig_env_file = process.env.CLAUDE_ENV_FILE;
@@ -38,8 +15,23 @@ describe('is_llm_agent_session', () => {
 	const orig_pi_session = process.env.PI_CODING_AGENT_SESSION_DIR;
 	const orig_my_pi = process.env.MY_PI_RUNTIME_MODE;
 	const orig_codex = process.env.CODEX_SANDBOX;
+	const additional_markers = [
+		'CODEX_THREAD_ID',
+		'CODEX_SESSION_ID',
+		'GEMINI_CLI',
+		'CURSOR_AGENT',
+		'AIDER_MODEL',
+	];
+	const original_markers = Object.fromEntries(
+		additional_markers.map((key) => [key, process.env[key]]),
+	);
 
 	afterEach(() => {
+		for (const key of additional_markers) {
+			if (original_markers[key] === undefined)
+				delete process.env[key];
+			else process.env[key] = original_markers[key];
+		}
 		if (orig_env_file) {
 			process.env.CLAUDE_ENV_FILE = orig_env_file;
 		} else {
@@ -77,7 +69,7 @@ describe('is_llm_agent_session', () => {
 		}
 	});
 
-	it('returns true when env-file injection is available', () => {
+	it('treats CLAUDE_ENV_FILE as an agent marker, not a delivery channel', () => {
 		process.env.CLAUDE_ENV_FILE = '/tmp/test-env';
 		delete process.env.CLAUDECODE;
 		delete process.env.CLAUDE_CODE_ENTRYPOINT;
@@ -128,6 +120,7 @@ describe('is_llm_agent_session', () => {
 	});
 
 	it('returns false when no agent markers are set', () => {
+		for (const key of additional_markers) delete process.env[key];
 		delete process.env.CLAUDE_ENV_FILE;
 		delete process.env.CLAUDECODE;
 		delete process.env.CLAUDE_CODE_ENTRYPOINT;

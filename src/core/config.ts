@@ -11,6 +11,9 @@ import { dirname } from 'node:path';
 import { write_secure } from '../utils/fs.js';
 import { config_path } from '../utils/paths.js';
 
+export const PERSISTENCE_WARNING =
+	'Stored keys are global plaintext, not project-scoped, and are not automatically loaded. Update or disable older auto-loading plugins and restart affected sessions.';
+
 export interface StoredKey {
 	value: string;
 	source: 'set' | 'load';
