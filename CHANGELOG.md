@@ -1,5 +1,12 @@
 # nopeek
 
+## 0.0.18
+
+### Patch Changes
+
+- cbd8597: Repeated .env keys now use the last value and warn instead
+  of failing.
+
 ## 0.0.17
 
 ### Patch Changes
