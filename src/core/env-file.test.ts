@@ -3,7 +3,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parse_env_file } from './env-file.js';
+import {
+	duplicate_key_message,
+	parse_env_file,
+	type DuplicateKey,
+} from './env-file.js';
 
 function tmp_env(content: string): string {
 	const dir = join(
@@ -64,6 +68,22 @@ describe('parse_env_file', () => {
 		]);
 	});
 
+	it('uses the last value for a repeated key and reports its lines', () => {
+		const duplicates: DuplicateKey[] = [];
+		const path = tmp_env('A=first\nB=keep\nA=second\nA=third');
+		expect(parse_env_file(path, duplicates)).toEqual([
+			{ key: 'A', value: 'third' },
+			{ key: 'B', value: 'keep' },
+		]);
+		expect(duplicates).toEqual([{ key: 'A', lines: [1, 3, 4] }]);
+		const message = duplicate_key_message('.env', duplicates[0]);
+		expect(message).toBe(
+			'Duplicate key A in .env (lines 1, 3, 4); using line 4',
+		);
+		expect(message).not.toContain('first');
+		expect(message).not.toContain('third');
+	});
+
 	it.each([
 		['BOM', '\uFEFFTOKEN=value', 'line 1'],
 		[
@@ -77,11 +97,6 @@ describe('parse_env_file', () => {
 		['malformed single quote', "TOKEN='secret", 'TOKEN'],
 		['trailing content', 'TOKEN="secret" garbage', 'TOKEN'],
 		['unsupported escape', 'TOKEN="secret\\x"', 'TOKEN'],
-		[
-			'duplicate key',
-			'TOKEN=first\nTOKEN=second',
-			'duplicate key "TOKEN"',
-		],
 	])(
 		'rejects %s without exposing values',
 		(_name, content, diagnostic) => {

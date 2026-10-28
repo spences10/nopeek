@@ -4,7 +4,12 @@ import {
 	read_config,
 	write_config,
 } from '../core/config.js';
-import { parse_file, type EnvEntry } from '../core/env-file.js';
+import {
+	duplicate_key_message,
+	parse_file,
+	type DuplicateKey,
+	type EnvEntry,
+} from '../core/env-file.js';
 import {
 	is_llm_agent_session,
 	shell_escape,
@@ -33,7 +38,8 @@ export function load_command(
 		fail(`File not found: ${file}`, json);
 	}
 
-	const entries = parse_file(file);
+	const duplicates: DuplicateKey[] = [];
+	const entries = parse_file(file, duplicates);
 	if (entries.length === 0) {
 		fail(`No keys found in ${file}`, json);
 	}
@@ -68,6 +74,14 @@ export function load_command(
 	}
 
 	const keys = selected.map(({ key }) => key);
+	const selected_duplicates = duplicates.filter(({ key }) =>
+		keys.includes(key),
+	);
+	if (!json) {
+		for (const duplicate of selected_duplicates) {
+			warning(duplicate_key_message(file, duplicate));
+		}
+	}
 	const in_agent_session = is_llm_agent_session();
 
 	if (allow_values && in_agent_session) {
@@ -183,6 +197,9 @@ export function load_command(
 		message: availability,
 	};
 	result.warning = availability;
+	if (selected_duplicates.length > 0) {
+		result.duplicate_keys = selected_duplicates;
+	}
 	if (persist) {
 		result.persistence_warning = PERSISTENCE_WARNING;
 	}

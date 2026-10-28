@@ -11,11 +11,20 @@ export interface EnvEntry {
 	value: string;
 }
 
-export function parse_file(path: string): EnvEntry[] {
+/** A dotenv key set on more than one line; the last line's value is used. */
+export interface DuplicateKey {
+	key: string;
+	lines: number[];
+}
+
+export function parse_file(
+	path: string,
+	duplicates?: DuplicateKey[],
+): EnvEntry[] {
 	if (path.endsWith('.tfvars.json'))
 		return parse_tfvars_json_file(path);
 	if (path.endsWith('.tfvars')) return parse_tfvars_file(path);
-	return parse_env_file(path);
+	return parse_env_file(path, duplicates);
 }
 
 export function parse_content(
@@ -33,18 +42,26 @@ export function parse_content(
  * by NAME=VALUE. Names match [A-Za-z_][A-Za-z0-9_]*. Values may be unquoted,
  * single quoted, or double quoted; double quotes support \\, \", \n, \r and \t.
  * Inline comments require whitespace before #, so a value-leading # is data.
+ * A repeated key keeps its first position and takes the last value, matching
+ * `node --env-file`; each repeat is reported through `duplicates`.
  * Expansion and multiline values
  * are intentionally unsupported.
  */
-export function parse_env_file(path: string): EnvEntry[] {
-	return parse_env_content(readFileSync(path, 'utf-8'));
+export function parse_env_file(
+	path: string,
+	duplicates?: DuplicateKey[],
+): EnvEntry[] {
+	return parse_env_content(readFileSync(path, 'utf-8'), duplicates);
 }
 
-export function parse_env_content(content: string): EnvEntry[] {
+export function parse_env_content(
+	content: string,
+	duplicates?: DuplicateKey[],
+): EnvEntry[] {
 	if (content.startsWith('\uFEFF'))
 		throw env_error('UTF-8 BOM is unsupported', 1);
 	const entries: EnvEntry[] = [];
-	const keys = new Set<string>();
+	const seen = new Map<string, { index: number; lines: number[] }>();
 
 	for (const [index, raw_line] of content.split(/\r?\n/).entries()) {
 		const line_number = index + 1;
@@ -56,17 +73,30 @@ export function parse_env_content(content: string): EnvEntry[] {
 				line_number,
 			);
 		}
-		if (keys.has(parsed.key)) {
-			throw env_error(
-				`duplicate key ${JSON.stringify(parsed.key)}`,
-				line_number,
-			);
+		const previous = seen.get(parsed.key);
+		if (previous) {
+			entries[previous.index] = parsed;
+			previous.lines.push(line_number);
+			continue;
 		}
-		keys.add(parsed.key);
+		seen.set(parsed.key, {
+			index: entries.length,
+			lines: [line_number],
+		});
 		entries.push(parsed);
 	}
 
+	for (const [key, { lines }] of seen) {
+		if (lines.length > 1) duplicates?.push({ key, lines });
+	}
 	return entries;
+}
+
+export function duplicate_key_message(
+	file: string,
+	{ key, lines }: DuplicateKey,
+): string {
+	return `Duplicate key ${key} in ${file} (lines ${lines.join(', ')}); using line ${lines[lines.length - 1]}`;
 }
 
 function parse_env_line(

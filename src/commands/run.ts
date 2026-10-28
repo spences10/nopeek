@@ -1,8 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { parse_file, type EnvEntry } from '../core/env-file.js';
+import {
+	duplicate_key_message,
+	parse_file,
+	type DuplicateKey,
+	type EnvEntry,
+} from '../core/env-file.js';
 import { validate_key } from '../core/session.js';
-import { error, fail } from '../utils/output.js';
+import { error, fail, warning } from '../utils/output.js';
 
 export function run_command(
 	file: string,
@@ -16,7 +21,8 @@ export function run_command(
 		fail('Missing command after --', false);
 	}
 
-	const entries = parse_file(file);
+	const duplicates: DuplicateKey[] = [];
+	const entries = parse_file(file, duplicates);
 	if (entries.length === 0) {
 		fail(`No keys found in ${file}`, false);
 	}
@@ -24,6 +30,12 @@ export function run_command(
 	const selected = select_entries(entries, only);
 	if (selected.length === 0) {
 		fail('No matching keys found', false);
+	}
+
+	const selected_keys = new Set(selected.map(({ key }) => key));
+	for (const duplicate of duplicates) {
+		if (selected_keys.has(duplicate.key))
+			warning(duplicate_key_message(file, duplicate));
 	}
 
 	const invalid_keys = [

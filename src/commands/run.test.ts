@@ -42,6 +42,32 @@ describe('run_command', () => {
 		rmSync(join(path, '..'), { recursive: true, force: true });
 	});
 
+	it('uses the last value for a repeated key and warns only for selected keys', () => {
+		const path = tmp_file(
+			'.env',
+			'SECRET=first\nOTHER=a\nOTHER=b\nSECRET=second',
+		);
+		vi.spyOn(process, 'exit').mockImplementation((code) => {
+			throw new Error(`exit:${code}`);
+		});
+		const stderr = vi
+			.spyOn(console, 'error')
+			.mockImplementation(() => {});
+
+		expect(() =>
+			run_command(path, 'SECRET', [
+				process.execPath,
+				'-e',
+				'process.exit(process.env.SECRET === "second" ? 0 : 1)',
+			]),
+		).toThrow('exit:0');
+		const warnings = stderr.mock.calls.map(([msg]) => String(msg));
+		expect(warnings).toEqual([
+			`  [warn] Duplicate key SECRET in ${path} (lines 1, 4); using line 4`,
+		]);
+		rmSync(join(path, '..'), { recursive: true, force: true });
+	});
+
 	it('validates the whole file before --only or spawning a command', () => {
 		const path = tmp_file(
 			'prod.tfvars.json',
