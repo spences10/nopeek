@@ -4,6 +4,7 @@ import { defineCommand, renderUsage, runMain } from 'citty';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fail } from './utils/output.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -11,60 +12,58 @@ const pkg = JSON.parse(
 );
 
 const WORKFLOW_SECTION = `Workflow:
-  1. npx nopeek init          Audit cloud CLI authentication
-  2. npx nopeek load .env     Inject .env secrets into session
-  3. npx nopeek run .env -- cmd  Run one command with loaded secrets
-  4. npx nopeek status        Verify session state and loaded keys
-  5. npx nopeek audit         Scan for exposed secrets`;
+  1. npx nopeek run .env --only API_KEY -- your-command
+     Pass selected secrets directly to one child process, without temp files or storage.
+  2. npx nopeek audit         Scan secret files and Git ignore coverage
+  3. npx nopeek init          Audit cloud CLI authentication (advisory only)`;
 
-const CONCEPTS_SECTION = `Concepts:
-  Key       A secret name (e.g. DATABASE_URL). Values never appear in output.
-  Source    Where the key came from: "set" (manual), "load" (from file).
-  Profile   A named auth config managed directly by its cloud CLI.
-  Session   LLM coding agent session detected via env-file injection or known agent markers.`;
+const CONCEPTS_SECTION = `Boundaries:
+  --only filters the input file, not the inherited parent environment.
+  The child receives real credentials and can print or write them.
+  nopeek does not redact child output or restrict access to the original file.`;
 
 const EXAMPLES_SECTION = `Examples:
-  npx nopeek load .env --only DATABASE_URL,API_KEY
-  npx nopeek run .env --only API_KEY -- sh -c 'curl -H "Authorization: Bearer $API_KEY" https://api.example.com'
-  npx nopeek set STRIPE_KEY --from-env
-  npx nopeek list
-  npx nopeek status
+  npx nopeek run .env --only DATABASE_URL -- node ./scripts/query.js
+  npx nopeek run production.tfvars.json --only API_KEY -- node ./scripts/call-api.js
   npx nopeek audit
   npx nopeek init
 
-  All commands output JSON by default (for LLM agents).
-  Use --no-json for human-readable text output.
-  Interactive prompts are skipped in non-TTY environments.`;
+  run passes through child output and preserves its exit code.
+  Advisory commands output JSON by default; use --no-json for text output.`;
+
+const retired_commands = new Set([
+	'load',
+	'set',
+	'list',
+	'remove',
+	'status',
+	'template',
+]);
 
 const main = defineCommand({
 	meta: {
 		name: 'nopeek',
 		version: pkg.version,
 		description:
-			'Load env secrets for LLM coding agents without exposing values.',
+			'Run one command with env secrets, without temp files or persistent storage.',
 	},
 	subCommands: {
-		load: () =>
-			import('./commands/load.cmd.js').then((m) => m.default),
 		run: () => import('./commands/run.cmd.js').then((m) => m.default),
-		set: () => import('./commands/set.cmd.js').then((m) => m.default),
-		list: () =>
-			import('./commands/list.cmd.js').then((m) => m.default),
-		remove: () =>
-			import('./commands/remove.cmd.js').then((m) => m.default),
 		init: () =>
 			import('./commands/init.cmd.js').then((m) => m.default),
-		status: () =>
-			import('./commands/status.cmd.js').then((m) => m.default),
 		audit: () =>
 			import('./commands/audit.cmd.js').then((m) => m.default),
-		template: () =>
-			import('./commands/template.cmd.js').then((m) => m.default),
 	},
 });
 
 // Non-TTY with no subcommand: auto-show help with workflow guidance
 const arg = process.argv[2];
+if (retired_commands.has(arg)) {
+	fail(
+		`The ${arg} command has been removed. Use nopeek run <file> --only KEY -- <command>. Legacy stored files are not read, migrated, or deleted.`,
+		false,
+	);
+}
 if (!arg && !process.stdout.isTTY) {
 	const base = await renderUsage(main);
 	console.log(

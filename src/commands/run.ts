@@ -6,7 +6,6 @@ import {
 	type DuplicateKey,
 	type EnvEntry,
 } from '../core/env-file.js';
-import { validate_key } from '../core/session.js';
 import { error, fail, warning } from '../utils/output.js';
 
 export function run_command(
@@ -42,7 +41,7 @@ export function run_command(
 		...new Set(
 			selected
 				.map(({ key }) => key)
-				.filter((key) => !validate_key(key)),
+				.filter((key) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)),
 		),
 	];
 	if (invalid_keys.length > 0) {

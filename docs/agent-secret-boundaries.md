@@ -1,5 +1,13 @@
 # Coding-agent credential boundaries
 
+> Historical assessment: the current CLI uses `run` as its only
+> credential-loading path. `load`, `set`, `list`, `remove`, `status`,
+> and `template`, along with temporary env files and persistent
+> storage, have been removed. The decisions and validation below
+> describe the earlier implementation and vendor versions inspected at
+> that time. See the [current README](../README.md) for supported
+> commands and migration guidance.
+
 Assessed 2026-09-27 for nopeek issues
 [#107](https://github.com/spences10/nopeek/issues/107) and
 [#108](https://github.com/spences10/nopeek/issues/108).

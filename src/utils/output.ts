@@ -7,7 +7,6 @@ export const warning = (msg: string) =>
 export const info = (msg: string) => console.error(`  ${msg}`);
 export const found = (msg: string) =>
 	console.error(`  Found: ${msg}`);
-export const label = (msg: string) => console.error(`  ${msg}`);
 
 /**
  * Unified output — JSON to stdout, text to stderr.

@@ -1,6 +1,5 @@
-import { read_config, write_config } from '../core/config.js';
 import { scan_all } from '../detectors/index.js';
-import { found, info, output, success } from '../utils/output.js';
+import { found, info, output } from '../utils/output.js';
 
 export async function init_command(json?: boolean): Promise<void> {
 	if (!json) {
@@ -8,18 +7,6 @@ export async function init_command(json?: boolean): Promise<void> {
 	}
 
 	const results = await scan_all();
-
-	// Profile mappings were persisted by older versions, but no command ever
-	// consumed them. Keep config-file compatibility while removing that dead
-	// state the next time the advisory scan runs.
-	const config = read_config();
-	const removed_legacy_profiles = Object.keys(
-		config.cli_profiles,
-	).length;
-	if (removed_legacy_profiles > 0) {
-		config.cli_profiles = {};
-		write_config(config);
-	}
 
 	const migrations = results
 		.filter((r) => r.status === 'migrate')
@@ -34,7 +21,6 @@ export async function init_command(json?: boolean): Promise<void> {
 			profile: r.profile || null,
 		})),
 		advisory: true,
-		removed_legacy_profiles,
 		migrations,
 	};
 
@@ -53,13 +39,6 @@ export async function init_command(json?: boolean): Promise<void> {
 						? '[MIGRATE]'
 						: '[SKIP]';
 			found(`${r.name}${version_str} — ${r.detail} ${status_tag}`);
-		}
-
-		if (removed_legacy_profiles > 0) {
-			console.error('');
-			success(
-				`${removed_legacy_profiles} obsolete CLI profile mapping(s) removed`,
-			);
 		}
 
 		if (migrations.length > 0) {

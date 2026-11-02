@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
 	existsSync,
 	lstatSync,
@@ -12,12 +12,13 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const CLI = join(process.cwd(), 'dist', 'index.js');
-const TIMEOUT_MS = 10_000;
-const AGENT_KEYS = [
+const cli =
+	process.env.NOPEEK_TEST_CLI ??
+	join(process.cwd(), 'dist', 'index.js');
+const agent_keys = [
 	'CLAUDE_ENV_FILE',
 	'CLAUDECODE',
 	'CLAUDE_CODE_ENTRYPOINT',
@@ -30,11 +31,8 @@ const AGENT_KEYS = [
 	'GEMINI_CLI',
 	'CURSOR_AGENT',
 	'AIDER_MODEL',
-	'BASH_ENV',
-	'ENV',
-	'ZDOTDIR',
 ];
-const isolations: { root: string; canary: string }[] = [];
+const roots: string[] = [];
 
 interface Harness {
 	root: string;
@@ -49,14 +47,28 @@ interface Harness {
 
 function harness(): Harness {
 	const root = mkdtempSync(join(tmpdir(), 'nopeek-integration-'));
+	roots.push(root);
 	const canary = `NOPEEK_CANARY_${randomBytes(12).toString('hex')}`;
-	isolations.push({ root, canary });
 	const env_file = join(root, '.env');
 	mkdirSync(join(root, 'home'));
 	mkdirSync(join(root, 'tmp'));
-	writeFileSync(env_file, `SECRET=${canary}\nSAFE=ok\n`);
+	writeFileSync(
+		env_file,
+		`NOPEEK_TEST_VALUE=${canary}\nSAFE=ok\nUNSELECTED=omit-me\n`,
+	);
 	const env = { ...process.env };
-	for (const key of AGENT_KEYS) delete env[key];
+	for (const key of [
+		...agent_keys,
+		'BASH_ENV',
+		'ENV',
+		'ZDOTDIR',
+		'NODE_OPTIONS',
+		'NOPEEK_TEST_VALUE',
+		'NOPEEK_INHERITED_VALUE',
+		'SAFE',
+		'UNSELECTED',
+	])
+		delete env[key];
 	Object.assign(env, {
 		HOME: join(root, 'home'),
 		XDG_CONFIG_HOME: join(root, 'config'),
@@ -70,371 +82,293 @@ function harness(): Harness {
 		canary,
 		env_file,
 		run: (args, override = env) =>
-			spawnSync(process.execPath, [CLI, ...args], {
+			spawnSync(process.execPath, [cli, ...args], {
 				cwd: root,
 				env: override,
 				encoding: 'utf-8',
-				timeout: TIMEOUT_MS,
+				timeout: 10_000,
 				shell: false,
 			}),
 	};
 }
 
 function output(result: ReturnType<typeof spawnSync>): string {
-	return `${String(result.stdout ?? '')}${String(result.stderr ?? '')}${String(result.error?.message ?? '')}`;
+	expect(result.error).toBeUndefined();
+	expect(result.signal).toBeNull();
+	return `${String(result.stdout ?? '')}${String(result.stderr ?? '')}`;
 }
 
-function expect_canary_absent(
-	result: ReturnType<typeof spawnSync>,
-	canary: string,
-): void {
-	expect(output(result)).not.toContain(canary);
-}
-
-function expect_no_unexpected_canary(
+function snapshot(
 	root: string,
-	canary: string,
-): void {
-	const allowed = new Set([
-		'.env',
-		'collision.tfvars.json',
-		'config.json',
-	]);
-	const visit = (dir: string): void => {
-		if (!existsSync(dir)) return;
-		for (const name of readdirSync(dir)) {
-			const path = join(dir, name);
+): Record<string, { type: string; mode: number; hash?: string }> {
+	const entries: ReturnType<typeof snapshot> = {};
+	const visit = (directory: string): void => {
+		for (const name of readdirSync(directory).sort()) {
+			const path = join(directory, name);
 			const stat = lstatSync(path);
-			if (stat.isSymbolicLink()) continue;
-			if (stat.isDirectory()) {
-				visit(path);
-				continue;
-			}
-			if (!stat.isFile() || allowed.has(name)) continue;
-			expect(readFileSync(path, 'utf-8')).not.toContain(canary);
+			const key = relative(root, path);
+			const type = stat.isSymbolicLink()
+				? 'symlink'
+				: stat.isDirectory()
+					? 'directory'
+					: 'file';
+			entries[key] = {
+				type,
+				mode: stat.mode,
+				...(stat.isFile()
+					? {
+							hash: createHash('sha256')
+								.update(readFileSync(path))
+								.digest('hex'),
+						}
+					: {}),
+			};
+			if (stat.isDirectory()) visit(path);
 		}
 	};
 	visit(root);
+	return entries;
 }
 
-function shell_available(shell: string): boolean {
-	return (
-		spawnSync(shell, ['--version'], {
-			stdio: 'ignore',
-			timeout: TIMEOUT_MS,
-			shell: false,
-		}).status === 0
+function run_probe(
+	h: Harness,
+	script: string,
+	env = h.env,
+): ReturnType<typeof spawnSync> {
+	return h.run(
+		[
+			'run',
+			h.env_file,
+			'--only',
+			'NOPEEK_TEST_VALUE',
+			'--',
+			process.execPath,
+			'-e',
+			script,
+		],
+		env,
 	);
-}
-
-function assignment_round_trip(shell: 'bash' | 'zsh' | 'fish'): void {
-	const h = harness();
-	const value = `${h.canary} space $HOME \`tick\` "quote" \\ slash`;
-	writeFileSync(h.env_file, `SECRET='${value}'\n`);
-	const emitted = h.run([
-		'load',
-		h.env_file,
-		'--shell',
-		shell,
-		'--allow-values',
-	]);
-	expect(emitted.status).toBe(0);
-	expect(String(emitted.stdout)).toContain(h.canary);
-	const script =
-		shell === 'fish'
-			? `${String(emitted.stdout)}\ntest "$SECRET" = "$argv[1]"`
-			: `${String(emitted.stdout)}\ntest "$SECRET" = "$1"`;
-	const evaluated = spawnSync(shell, ['-c', script, '--', value], {
-		cwd: h.root,
-		env: h.env,
-		encoding: 'utf-8',
-		timeout: TIMEOUT_MS,
-		shell: false,
-	});
-	expect(evaluated.status).toBe(0);
-	expect(String(evaluated.stderr)).not.toContain(h.canary);
-	expect(process.env.SECRET).not.toBe(h.canary);
-	const sibling = spawnSync(shell, ['-c', 'test -z "$SECRET"'], {
-		env: h.env,
-		encoding: 'utf-8',
-		timeout: TIMEOUT_MS,
-		shell: false,
-	});
-	expect(sibling.status).toBe(0);
 }
 
 afterEach(() => {
-	for (const { root, canary } of isolations.splice(0)) {
-		expect_no_unexpected_canary(root, canary);
+	for (const root of roots.splice(0))
 		rmSync(root, { recursive: true, force: true });
-	}
 });
 
-describe('built CLI security boundaries', () => {
-	it('fails closed to name-only JSON in an unknown non-TTY harness', () => {
-		const h = harness();
-		const loaded = h.run(['load', h.env_file]);
-
-		expect(loaded.status).toBe(0);
-		expect_canary_absent(loaded, h.canary);
-		const payload = JSON.parse(String(loaded.stdout)) as {
-			method: string;
-			contains_values: boolean;
-			available_to_future_commands: boolean;
-			persisted: boolean;
-		};
-		expect(payload).toMatchObject({
-			method: 'name_only',
-			contains_values: false,
-			available_to_future_commands: false,
-			persisted: false,
-		});
-		expect(existsSync(join(h.root, 'config'))).toBe(false);
-		expect(readdirSync(join(h.root, 'tmp'))).toEqual([]);
-	});
-
-	it('fails closed to name-only text in an unknown non-TTY harness', () => {
-		const h = harness();
-		const loaded = h.run(['load', h.env_file, '--no-json']);
-
-		expect(loaded.status).toBe(0);
-		expect(String(loaded.stdout)).toBe('');
-		expect(String(loaded.stderr)).toContain('SECRET');
-		expect(String(loaded.stderr)).toContain(
-			'not available to future commands',
-		);
-		expect_canary_absent(loaded, h.canary);
-		expect(existsSync(join(h.root, 'config'))).toBe(false);
-		expect(readdirSync(join(h.root, 'tmp'))).toEqual([]);
-	});
-
-	it('requires assignment opt-in and rejects it in detected agents', () => {
-		const h = harness();
-		const denied = h.run(['load', h.env_file, '--shell', 'bash']);
-		expect(denied.status).not.toBe(0);
-		expect_canary_absent(denied, h.canary);
-
-		const agent = h.run(
-			['load', h.env_file, '--shell', 'bash', '--allow-values'],
-			{ ...h.env, PI_CODING_AGENT: 'true' },
-		);
-		expect(agent.status).not.toBe(0);
-		expect_canary_absent(agent, h.canary);
-		expect(existsSync(join(h.root, 'config'))).toBe(false);
-	});
-
-	it('round-trips explicitly disclosed assignments in bash', () => {
-		expect(shell_available('bash')).toBe(true);
-		assignment_round_trip('bash');
-	});
-
-	it.skipIf(!shell_available('zsh'))(
-		'round-trips explicitly disclosed assignments in zsh (optional)',
-		() => assignment_round_trip('zsh'),
-	);
-
-	it.skipIf(!shell_available('fish'))(
-		'round-trips explicitly disclosed assignments in fish (optional)',
-		() => assignment_round_trip('fish'),
-	);
-
-	it.each([false, true])(
-		'never writes CLAUDE_ENV_FILE (persist=%s)',
-		(persist) => {
+describe('built CLI run-only security boundaries', () => {
+	it.each([{ args: [] }, { args: ['--help'] }])(
+		'advertises only stateless commands ($args)',
+		({ args }) => {
 			const h = harness();
-			const session_env = join(h.root, 'session.env');
-			writeFileSync(session_env, 'EXISTING=yes\n');
-			const loaded = h.run(
+			const before = snapshot(h.root);
+			const result = h.run(args);
+			expect(result.status).toBe(0);
+			const text = output(result);
+			for (const command of ['run', 'init', 'audit'])
+				expect(text).toMatch(new RegExp(`\\b${command}\\b`));
+			expect(text).not.toMatch(
+				/nopeek (load|set|list|remove|status|template)\b/,
+			);
+			expect(text).not.toContain(h.canary);
+			expect(snapshot(h.root)).toEqual(before);
+		},
+	);
+
+	it.each(['load', 'set', 'list', 'remove', 'status', 'template'])(
+		'rejects retired %s without reading or writing stored credentials',
+		(command) => {
+			const h = harness();
+			const config_dir = join(h.root, 'config', 'nopeek');
+			mkdirSync(config_dir, { recursive: true });
+			writeFileSync(
+				join(config_dir, 'config.json'),
+				`{ "legacy": "${h.canary}"`,
+			);
+			const before = snapshot(h.root);
+			const result = h.run(
 				[
-					'load',
+					command,
 					h.env_file,
+					'--persist',
 					'--only',
-					'SECRET',
-					...(persist ? ['--persist'] : []),
+					'NOPEEK_TEST_VALUE',
+					'--value',
+					h.canary,
 				],
-				{ ...h.env, CLAUDE_ENV_FILE: session_env },
-			);
-			expect(loaded.status).toBe(0);
-			expect_canary_absent(loaded, h.canary);
-			expect(readFileSync(session_env, 'utf-8')).toBe(
-				'EXISTING=yes\n',
-			);
-			const payload = JSON.parse(String(loaded.stdout));
-			expect(payload).toMatchObject({
-				method: 'source_file',
-				available_to_future_commands: false,
-				contains_values: false,
-			});
-			expect(payload.message).toContain('disabled');
-			const sourced = spawnSync(
-				'bash',
-				['-c', `${payload.next_command} && test -n "$SECRET"`],
 				{
-					env: h.env,
-					encoding: 'utf-8',
-					timeout: TIMEOUT_MS,
+					...h.env,
+					PI_CODING_AGENT: 'true',
+					CLAUDE_ENV_FILE: join(h.root, 'session.env'),
 				},
 			);
-			expect(sourced.status).toBe(0);
-			expect_canary_absent(sourced, h.canary);
-			expect(existsSync(payload.source_path)).toBe(false);
+			expect(result.status).toBe(1);
+			expect(output(result)).toContain(
+				`The ${command} command has been removed`,
+			);
+			expect(output(result)).toContain('nopeek run');
+			expect(output(result)).not.toContain(h.canary);
+			expect(snapshot(h.root)).toEqual(before);
 		},
 	);
 
-	it('does not create an absent session env target', () => {
+	it.each(['--persist', '--allow-values', '--shell'])(
+		'rejects obsolete run option %s before spawning a child',
+		(option) => {
+			const h = harness();
+			const before = snapshot(h.root);
+			const result = h.run([
+				'run',
+				h.env_file,
+				option,
+				'--',
+				process.execPath,
+				'-e',
+				'process.exit(99)',
+			]);
+			expect(result.status).toBe(1);
+			expect(output(result)).toContain('Unknown run option');
+			expect(output(result)).not.toContain(h.canary);
+			expect(snapshot(h.root)).toEqual(before);
+		},
+	);
+
+	it.each(['unknown', ...agent_keys])(
+		'creates no secret copies or session state for %s',
+		(marker) => {
+			const h = harness();
+			const env = { ...h.env };
+			if (marker !== 'unknown')
+				env[marker] =
+					marker === 'CLAUDE_ENV_FILE'
+						? join(h.root, 'session.env')
+						: '1';
+			const before = snapshot(h.root);
+			const child = run_probe(
+				h,
+				'process.exit(process.env.NOPEEK_TEST_VALUE?.startsWith("NOPEEK_CANARY_") && process.env.UNSELECTED === undefined ? 7 : 1)',
+				env,
+			);
+			expect(child.status).toBe(7);
+			expect(output(child)).not.toContain(h.canary);
+			expect(snapshot(h.root)).toEqual(before);
+			expect(existsSync(join(h.root, 'config'))).toBe(false);
+		},
+	);
+
+	it('does not read, migrate, or delete legacy plaintext files', () => {
 		const h = harness();
-		const target = join(h.root, 'absent', 'session.env');
-		const loaded = h.run(['load', h.env_file], {
-			...h.env,
-			CLAUDE_ENV_FILE: target,
-		});
-		expect(loaded.status).toBe(0);
-		expect(existsSync(target)).toBe(false);
-		expect_canary_absent(loaded, h.canary);
-		rmSync(JSON.parse(String(loaded.stdout)).source_path);
+		const config_dir = join(h.root, 'config', 'nopeek');
+		const old_temp_dir = join(h.root, 'tmp', 'nopeek');
+		const temp_dir = join(
+			h.root,
+			'tmp',
+			`nopeek-${process.getuid?.()}`,
+		);
+		for (const directory of [config_dir, old_temp_dir, temp_dir])
+			mkdirSync(directory, { recursive: true });
+		writeFileSync(
+			join(config_dir, 'config.json'),
+			`{ "legacy": "${h.canary}"`,
+		);
+		writeFileSync(join(old_temp_dir, 'env.sh'), h.canary);
+		writeFileSync(
+			join(temp_dir, `env-${'a'.repeat(32)}.sh`),
+			h.canary,
+		);
+		const session_env = join(h.root, 'session.env');
+		writeFileSync(session_env, 'EXISTING=yes\n');
+		const before = snapshot(h.root);
+
+		const child = run_probe(
+			h,
+			'process.exit(process.env.NOPEEK_TEST_VALUE && process.env.LEGACY_VALUE === undefined ? 0 : 1)',
+			{ ...h.env, CLAUDE_ENV_FILE: session_env },
+		);
+
+		expect(child.status).toBe(0);
+		expect(output(child)).not.toContain(h.canary);
+		expect(snapshot(h.root)).toEqual(before);
 	});
 
-	it.each([undefined, '', ' , '])(
-		'requires explicit --only for persistence (%s)',
-		(only) => {
+	it.skipIf(process.platform === 'win32')(
+		'ignores symlinked legacy storage without touching its target',
+		() => {
 			const h = harness();
-			const failed = h.run([
-				'load',
-				h.env_file,
-				'--persist',
-				...(only === undefined ? [] : ['--only', only]),
-			]);
-			expect(failed.status).toBe(1);
-			expect(output(failed)).toContain('--persist requires --only');
-			expect(
-				existsSync(
-					join(h.env.XDG_CONFIG_HOME!, 'nopeek', 'config.json'),
-				),
-			).toBe(false);
-			expect_canary_absent(failed, h.canary);
+			mkdirSync(join(h.root, 'config'));
+			const target = join(h.root, 'legacy-target');
+			mkdirSync(target);
+			writeFileSync(join(target, 'config.json'), h.canary);
+			symlinkSync(target, join(h.root, 'config', 'nopeek'));
+			const before = snapshot(h.root);
+
+			const child = run_probe(
+				h,
+				'process.exit(process.env.NOPEEK_TEST_VALUE ? 0 : 1)',
+			);
+
+			expect(child.status).toBe(0);
+			expect(output(child)).not.toContain(h.canary);
+			expect(snapshot(h.root)).toEqual(before);
 		},
 	);
 
-	it('does not load globally persisted keys into another project', () => {
+	it.each([
+		{ command: 'init', args: [], status: 0 },
+		{ command: 'audit', args: ['scan'], status: 1 },
+	])(
+		'keeps $command advisory without touching legacy storage',
+		({ command, args, status }) => {
+			const h = harness();
+			const config_dir = join(h.root, 'config', 'nopeek');
+			mkdirSync(config_dir, { recursive: true });
+			writeFileSync(
+				join(config_dir, 'config.json'),
+				`{ "legacy": "${h.canary}"`,
+			);
+			mkdirSync(join(h.root, 'scan'));
+			mkdirSync(join(h.root, 'empty-path'));
+			const before = snapshot(h.root);
+
+			const result = h.run([command, ...args], {
+				...h.env,
+				PATH: join(h.root, 'empty-path'),
+			});
+
+			expect(result.status).toBe(status);
+			expect(output(result)).not.toContain(h.canary);
+			const payload = JSON.parse(String(result.stdout));
+			expect(payload).toMatchObject(
+				command === 'init'
+					? { advisory: true, detected: [] }
+					: { bounded: true, git_status: 'unavailable' },
+			);
+			expect(snapshot(h.root)).toEqual(before);
+		},
+	);
+
+	it('does not leave values in a later command environment', () => {
 		const h = harness();
-		const persisted = h.run([
-			'load',
+		expect(
+			run_probe(
+				h,
+				'process.exit(process.env.NOPEEK_TEST_VALUE ? 0 : 1)',
+			).status,
+		).toBe(0);
+		const sibling = h.run([
+			'run',
 			h.env_file,
 			'--only',
-			'SECRET',
-			'--persist',
-		]);
-		expect(persisted.status).toBe(0);
-		expect(
-			JSON.parse(String(persisted.stdout)).persistence_warning,
-		).toContain('not project-scoped');
-		const project_b = join(h.root, 'project-b');
-		mkdirSync(project_b);
-		const source_b = join(project_b, '.env');
-		writeFileSync(source_b, 'SAFE=project-b\n');
-		const child = spawnSync(
+			'SAFE',
+			'--',
 			process.execPath,
-			[
-				CLI,
-				'run',
-				source_b,
-				'--only',
-				'SAFE',
-				'--',
-				process.execPath,
-				'-e',
-				'process.exit(process.env.SECRET === undefined && process.env.SAFE === "project-b" ? 0 : 1)',
-			],
-			{
-				cwd: project_b,
-				env: { ...h.env, SECRET: undefined },
-				encoding: 'utf-8',
-				timeout: TIMEOUT_MS,
-			},
-		);
-		expect(child.status).toBe(0);
-		expect_canary_absent(child, h.canary);
+			'-e',
+			'process.exit(process.env.SAFE === "ok" && process.env.NOPEEK_TEST_VALUE === undefined ? 0 : 1)',
+		]);
+		expect(sibling.status).toBe(0);
+		expect(output(sibling)).not.toContain(h.canary);
 	});
 
-	it.skipIf(process.platform !== 'linux')(
-		'keeps run credentials out of child and nopeek process arguments',
-		() => {
-			const h = harness();
-			const inspect = `const fs = require('node:fs');
-			const value = process.env.SECRET;
-			const args = [process.pid, process.ppid].map(pid => fs.readFileSync('/proc/' + pid + '/cmdline', 'utf8'));
-			process.exit(value && args.every(arg => !arg.includes(value)) ? 0 : 1);`;
-			const child = h.run([
-				'run',
-				h.env_file,
-				'--only',
-				'SECRET',
-				'--',
-				process.execPath,
-				'-e',
-				inspect,
-			]);
-			expect(child.status).toBe(0);
-			expect_canary_absent(child, h.canary);
-			// Positive control: the same probe must catch deliberate child argv exposure.
-			const exposed = h.run([
-				'run',
-				h.env_file,
-				'--only',
-				'SECRET',
-				'--',
-				process.execPath,
-				'-e',
-				inspect,
-				h.canary,
-			]);
-			expect(exposed.status).toBe(1);
-		},
-	);
-
-	it.skipIf(process.platform !== 'linux')(
-		'keeps sourced credentials out of the shell and child arguments',
-		() => {
-			const h = harness();
-			const loaded = h.run(['load', h.env_file, '--only', 'SECRET'], {
-				...h.env,
-				CLAUDE_ENV_FILE: join(h.root, 'session.env'),
-			});
-			expect(loaded.status).toBe(0);
-			const payload = JSON.parse(String(loaded.stdout));
-			const probe = join(h.root, 'probe.cjs');
-			writeFileSync(
-				probe,
-				`const fs = require('node:fs');
-			const value = process.env.SECRET;
-			const args = [process.pid, process.ppid].map(pid => fs.readFileSync('/proc/' + pid + '/cmdline', 'utf8'));
-			process.exit(value && args.every(arg => !arg.includes(value)) ? 0 : 1);`,
-			);
-			const child = spawnSync(
-				'bash',
-				[
-					'--noprofile',
-					'--norc',
-					'-c',
-					`${payload.next_command} && "$1" "$2"; exit $?`,
-					'--',
-					process.execPath,
-					probe,
-				],
-				{
-					env: h.env,
-					encoding: 'utf-8',
-					timeout: TIMEOUT_MS,
-				},
-			);
-			expect(child.status).toBe(0);
-			expect_canary_absent(child, h.canary);
-			expect(existsSync(payload.source_path)).toBe(false);
-			expect(existsSync(join(h.root, 'session.env'))).toBe(false);
-		},
-	);
-
-	it('preserves inherited environment: --only filters the file, not the parent', () => {
+	it('preserves inherited credentials: --only filters the file, not the parent', () => {
 		const h = harness();
 		const child = h.run(
 			[
@@ -445,117 +379,105 @@ describe('built CLI security boundaries', () => {
 				'--',
 				process.execPath,
 				'-e',
-				'process.exit(process.env.INHERITED_CANARY && process.env.SAFE === "ok" ? 0 : 1)',
+				'process.exit(process.env.NOPEEK_INHERITED_VALUE && process.env.SAFE === "ok" && process.env.NOPEEK_TEST_VALUE === undefined ? 0 : 1)',
 			],
-			{ ...h.env, INHERITED_CANARY: h.canary },
+			{ ...h.env, NOPEEK_INHERITED_VALUE: h.canary },
 		);
 		expect(child.status).toBe(0);
-		expect_canary_absent(child, h.canary);
+		expect(output(child)).not.toContain(h.canary);
 	});
 
-	it.each([
-		'CLAUDECODE',
-		'CLAUDE_CODE_ENTRYPOINT',
-		'PI_CODING_AGENT',
-		'MY_PI_RUNTIME_MODE',
-		'CODEX_SANDBOX',
-		'CODEX_THREAD_ID',
-		'CODEX_SESSION_ID',
-		'GEMINI_CLI',
-		'CURSOR_AGENT',
-		'AIDER_MODEL',
-	])('refuses value-emitting modes for %s', (marker) => {
-		const h = harness();
-		const env = { ...h.env, [marker]: '1', SYNTHETIC_KEY: h.canary };
-		for (const args of [
-			['load', h.env_file, '--shell', 'bash', '--allow-values'],
-			['set', 'SYNTHETIC_KEY', '--value', h.canary],
-		]) {
-			const denied = h.run(args, env);
-			expect(denied.status).toBe(1);
-			expect_canary_absent(denied, h.canary);
-		}
-	});
-
-	it('creates a private self-removing source fallback with no early inheritance', () => {
-		const h = harness();
-		const loaded = h.run(['load', h.env_file], {
-			...h.env,
-			PI_CODING_AGENT: 'true',
-		});
-		expect(loaded.status).toBe(0);
-		expect_canary_absent(loaded, h.canary);
-		const payload = JSON.parse(String(loaded.stdout)) as {
-			method: string;
-			source_path: string;
-		};
-		expect(payload.method).toBe('source_file');
-		expect(process.env.SECRET).not.toBe(h.canary);
-		const file_stat = lstatSync(payload.source_path);
-		const root_stat = lstatSync(join(payload.source_path, '..'));
-		expect(file_stat.mode & 0o777).toBe(0o600);
-		expect(root_stat.mode & 0o777).toBe(0o700);
-		const sourced = spawnSync(
-			'bash',
-			[
-				'-c',
-				`source "$1"; status=$?; test "$SECRET" = "$2" && test ! -e "$1" && ! compgen -A function | grep -q '^_nopeek_'; exit $status`,
+	it.skipIf(process.platform !== 'linux')(
+		'keeps credentials out of nopeek and child argv, with a positive control',
+		() => {
+			const h = harness();
+			const inspect = `const fs = require('node:fs');
+const value = process.env.NOPEEK_TEST_VALUE;
+const args = [process.pid, process.ppid].map(pid => fs.readFileSync('/proc/' + pid + '/cmdline', 'utf8'));
+process.exit(value && args.every(arg => !arg.includes(value)) ? 0 : 1);`;
+			const child = run_probe(h, inspect);
+			expect(child.status).toBe(0);
+			expect(output(child)).not.toContain(h.canary);
+			const exposed = h.run([
+				'run',
+				h.env_file,
+				'--only',
+				'NOPEEK_TEST_VALUE',
 				'--',
-				payload.source_path,
+				process.execPath,
+				'-e',
+				inspect,
 				h.canary,
-			],
-			{ env: h.env, encoding: 'utf-8', timeout: TIMEOUT_MS },
-		);
-		expect(sourced.status).toBe(0);
-		expect(existsSync(payload.source_path)).toBe(false);
-	});
+			]);
+			expect(exposed.status).toBe(1);
+			expect(output(exposed)).not.toContain(h.canary);
+		},
+	);
 
-	it('keeps run argv and environment boundaries while preserving child exit', () => {
+	it('preserves literal command arguments and the child exit code', () => {
 		const h = harness();
-		const marker = join(h.root, 'injected');
+		const before = snapshot(h.root);
 		const child = h.run([
 			'run',
 			h.env_file,
 			'--only',
-			'SECRET',
+			'NOPEEK_TEST_VALUE',
 			'--',
 			process.execPath,
 			'-e',
-			'process.exit(process.env.SECRET === process.argv[1] && process.argv[2] === "a;touch injected" ? 7 : 1)',
-			h.canary,
+			'process.exit(process.env.NOPEEK_TEST_VALUE && process.argv[1] === "a;touch injected" ? 7 : 1)',
 			'a;touch injected',
 		]);
 		expect(child.status).toBe(7);
-		expect_canary_absent(child, h.canary);
-		expect(existsSync(marker)).toBe(false);
-		expect(process.env.SECRET).not.toBe(h.canary);
+		expect(output(child)).not.toContain(h.canary);
+		expect(snapshot(h.root)).toEqual(before);
 	});
 
-	it('confines deliberate child env disclosure to child-controlled stdout', () => {
+	it.each(['stdout', 'stderr'] as const)(
+		'does not pretend to redact child-controlled %s',
+		(stream) => {
+			const h = harness();
+			const child = run_probe(
+				h,
+				`process.${stream}.write(process.env.NOPEEK_TEST_VALUE ?? "")`,
+			);
+			expect(child.status).toBe(0);
+			output(child);
+			expect(String(child[stream])).toBe(h.canary);
+			expect(
+				String(child[stream === 'stdout' ? 'stderr' : 'stdout']),
+			).not.toContain(h.canary);
+		},
+	);
+
+	it.each([
+		['production.tfvars', 'api_value = "fixture"\n'],
+		['production.tfvars.json', '{"api_value":"fixture"}'],
+	])('supports %s without storage side effects', (name, content) => {
 		const h = harness();
+		const source = join(h.root, name);
+		writeFileSync(source, content);
+		const before = snapshot(h.root);
 		const child = h.run([
 			'run',
-			h.env_file,
+			source,
 			'--only',
-			'SECRET',
+			'api_value',
 			'--',
 			process.execPath,
 			'-e',
-			'process.stdout.write(process.env.SECRET ?? "")',
+			'process.exit(process.env.api_value === "fixture" ? 0 : 1)',
 		]);
 		expect(child.status).toBe(0);
-		expect(String(child.stdout)).toBe(h.canary);
-		expect(String(child.stderr)).not.toContain(h.canary);
+		expect(output(child)).not.toContain(h.canary);
+		expect(snapshot(h.root)).toEqual(before);
 	});
 
-	it('fails malformed input before output, persistence, or child spawn', () => {
+	it('rejects malformed input before spawning a child or creating files', () => {
 		const h = harness();
-		const marker = join(h.root, 'spawned');
-		writeFileSync(
-			h.env_file,
-			`SAFE=ok\nSAFE=duplicate\nBROKEN="${h.canary}\n`,
-		);
-		const failed = h.run([
+		writeFileSync(h.env_file, `SAFE=ok\nBROKEN="${h.canary}\n`);
+		const before = snapshot(h.root);
+		const child = h.run([
 			'run',
 			h.env_file,
 			'--only',
@@ -563,86 +485,52 @@ describe('built CLI security boundaries', () => {
 			'--',
 			process.execPath,
 			'-e',
-			`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'yes')`,
+			'process.exit(99)',
 		]);
-		expect(failed.status).not.toBe(0);
-		expect_canary_absent(failed, h.canary);
-		expect(existsSync(marker)).toBe(false);
-		expect(existsSync(join(h.root, 'config'))).toBe(false);
+		expect(child.status).not.toBe(0);
+		expect(child.status).not.toBe(99);
+		expect(output(child)).not.toContain(h.canary);
+		expect(snapshot(h.root)).toEqual(before);
 	});
 
 	it('rejects flattened parser collisions before child execution', () => {
 		const h = harness();
-		const tfvars = join(h.root, 'collision.tfvars.json');
-		const marker = join(h.root, 'spawned');
+		const source = join(h.root, 'collision.tfvars.json');
 		writeFileSync(
-			tfvars,
+			source,
 			JSON.stringify({
-				TOKEN: h.canary,
-				nested: { TOKEN: 'collision' },
+				NOPEEK_TEST_VALUE: h.canary,
+				nested: { NOPEEK_TEST_VALUE: 'other-value' },
 			}),
 		);
-		const failed = h.run([
+		const before = snapshot(h.root);
+		const child = h.run([
 			'run',
-			tfvars,
+			source,
 			'--only',
-			'TOKEN',
+			'NOPEEK_TEST_VALUE',
 			'--',
 			process.execPath,
 			'-e',
-			`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'yes')`,
+			'process.exit(99)',
 		]);
-		expect(failed.status).not.toBe(0);
-		expect_canary_absent(failed, h.canary);
-		expect(existsSync(marker)).toBe(false);
+		expect(child.status).not.toBe(0);
+		expect(child.status).not.toBe(99);
+		expect(output(child)).not.toContain(h.canary);
+		expect(snapshot(h.root)).toEqual(before);
 	});
 
-	it('rejects symlinked config without touching its target', () => {
+	it('reports a missing executable without writing credentials', () => {
 		const h = harness();
-		const config_parent = join(h.root, 'config');
-		const target = join(h.root, 'config-target');
-		mkdirSync(config_parent, { recursive: true });
-		mkdirSync(target, { mode: 0o700 });
-		writeFileSync(join(target, 'sentinel'), 'untouched', {
-			mode: 0o600,
-		});
-		symlinkSync(target, join(config_parent, 'nopeek'));
-
-		const failed = h.run(['status']);
-		expect(failed.status).not.toBe(0);
-		expect_canary_absent(failed, h.canary);
-		expect(readFileSync(join(target, 'sentinel'), 'utf-8')).toBe(
-			'untouched',
-		);
-	});
-
-	it('fails corrupt config and unsafe temp roots without value disclosure', () => {
-		const h = harness();
-		const config_dir = join(h.root, 'config', 'nopeek');
-		const temp_root = join(
-			h.root,
-			'tmp',
-			`nopeek-${process.getuid?.()}`,
-		);
-		mkdirSync(config_dir, { recursive: true });
-		writeFileSync(
-			join(config_dir, 'config.json'),
-			`{ "value": "${h.canary}"`,
-			{ mode: 0o600 },
-		);
-		const corrupt = h.run(['status']);
-		expect(corrupt.status).not.toBe(0);
-		expect_canary_absent(corrupt, h.canary);
-		expect(existsSync(config_dir)).toBe(true);
-
-		rmSync(join(h.root, 'tmp'), { recursive: true, force: true });
-		mkdirSync(join(h.root, 'tmp'), { recursive: true });
-		writeFileSync(temp_root, 'not a directory');
-		const unsafe = h.run(['load', h.env_file], {
-			...h.env,
-			PI_CODING_AGENT: 'true',
-		});
-		expect(unsafe.status).not.toBe(0);
-		expect_canary_absent(unsafe, h.canary);
+		const before = snapshot(h.root);
+		const child = h.run([
+			'run',
+			h.env_file,
+			'--',
+			join(h.root, 'missing-executable'),
+		]);
+		expect(child.status).toBe(127);
+		expect(output(child)).not.toContain(h.canary);
+		expect(snapshot(h.root)).toEqual(before);
 	});
 });

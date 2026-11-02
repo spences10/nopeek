@@ -4,100 +4,55 @@
 [![tested with vitest](https://img.shields.io/badge/tested%20with-Vitest-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev)
 
 CLI for reducing accidental secret disclosure in LLM coding sessions.
-nopeek gives agents a normal workflow for secret-dependent commands
-without requiring secret values to be pasted into prompts or printed
-by the loading step.
+Pass selected secrets from an existing file directly to one child
+process, without printing the values during loading, creating
+temporary secret files, or storing a second copy.
 
 ## Quick Start
 
 Tell your coding agent:
 
-> Use npx nopeek if you need keys.
+> If you need a secret, use
+> `pnpx nopeek run .env --only KEY -- your-command`. Do not read or
+> print secret files. Prefer clients that read credentials directly
+> from their environment, and do not log them.
 
-Swap `npx` for `pnpx` or `bunx` if that's what you use. The agent
-handles the commands and key selection—you don't need to.
+```bash
+pnpx nopeek run .env --only API_KEY -- node ./scripts/call-api.js
+pnpx nopeek run .env --only DATABASE_URL -- node ./scripts/query.js
+```
 
-For agents and integrations: prefer `run` for each
-credential-dependent command, not session-wide loading. See
-[Usage](#usage) and the
-[security boundaries](#threat-model-and-non-goals).
+`npx nopeek`, `pnpx nopeek`, and `bunx nopeek` all work. The command
+runs once, forwards child output and exit status, and keeps loaded
+values out of nopeek's command arguments. No daemon, account, key
+store, session hook, or agent detection is required.
 
-## How It Works
-
-Shell output visible to an LLM coding agent may be sent to a model
-provider and retained there. Agents also have a habit of inspecting
-`.env` files or echoing variables when credentials are needed. nopeek
-provides a lower-risk path for routine work:
-
-1. It parses the requested secret file locally.
-2. `run` gives selected values to one child process and its
-   descendants. `load` can prepare a private source file for an
-   explicit shell command.
-3. nopeek's normal status output reports key names and loading state,
-   not values.
-
-This reduces accidental disclosure. It does not make secrets
-inaccessible to the agent or to the child command that receives them.
-
-> **Important:** Your agent does not know about nopeek unless you
-> mention it. You do not need to spell out the full command, just
-> mention `npx nopeek` (or `pnpx nopeek` / `bunx nopeek`) and the
-> agent can discover the rest.
+**The child receives real credentials and can disclose them.** nopeek
+is not an output redactor, secret broker, or access-control boundary.
 
 ### Optional agent reminders
 
-If you use a harness with persistent system-prompt extensions, add a
-small reminder so the model reaches for nopeek automatically instead
-of needing the Quick Start text in every prompt. For Pi users, the
-`@spences10/pi-nopeek` extension does this:
+An agent must know to use nopeek. Mention it in the session or add the
+Quick Start instruction to your agent's project guidance. For Pi
+users, the optional `@spences10/pi-nopeek` extension supplies a
+reminder:
 
 ```bash
 pi install npm:@spences10/pi-nopeek
 ```
 
-[`my-pi`](https://github.com/spences10/my-pi) already includes this
-reminder by default. Its separate `pi-redact` extension also applies
-best-effort, last-mile redaction to tool results before model context.
-Those are optional defense-in-depth features, not capabilities of the
-standalone nopeek CLI. nopeek remains harness-agnostic and works
-anywhere when you mention it in the session.
-
-`load` reports one of three methods:
-
-| Method        | Context                                       | Availability                                                                                                                     |
-| ------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `source_file` | Detected agent session, including Claude Code | A self-removing `0600` file in a verified per-user `0700` root is created; source its path only in the shell running the command |
-| `name_only`   | Regular default                               | Only key names are reported; no assignments or values are emitted                                                                |
-| `export`      | Non-JSON output with `--allow-values`         | Assignments are printed; variables exist only if the parent shell evaluates them                                                 |
-
-`load` reports its method and whether future commands can see the
-variables. It cannot mutate a parent shell. Prefer `nopeek run` or use
-the reported safe next step.
-
-## Usage
-
-These commands are for the agent to use, not prompts you need to type.
-It can use `npx`, `pnpx`, or `bunx` (`bun x`); `npx` is shown below.
-
-```bash
-npx nopeek load .env
-npx nopeek load .env --only DATABASE_URL
-npx nopeek run .env --only API_KEY -- node ./scripts/call-api.js
-npx nopeek set MY_API_KEY --from-env
-npx nopeek status
-```
-
-The recommended default for an LLM coding session is `run`. `load`
-does not make variables available to later tool calls. Commands that
-emit shell assignments require extra care, as described below.
+[`my-pi`](https://github.com/spences10/my-pi) includes a reminder and
+a separate `pi-redact` extension for best-effort tool-result
+redaction. Update any installed instructions that still recommend
+`load`, `set`, or session-wide environment injection. Harness
+redaction is separate from the standalone CLI and cannot guarantee
+complete protection.
 
 ### Installation trust
 
-`npx nopeek` is convenient for evaluation, but npm may download code
-when the requested package is not already available locally. For
-production-secret work, prefer a reviewed exact version containing the
-security fixes below in a trusted project lockfile. Replace the
-version placeholder before running:
+Package runners may download and execute code. For production secrets,
+prefer a reviewed exact version in a trusted project lockfile. Replace
+the version placeholder before running:
 
 ```bash
 pnpm add --save-exact 'nopeek@<reviewed-version>'
@@ -105,218 +60,104 @@ pnpm install --frozen-lockfile
 pnpm exec nopeek run .env --only API_KEY -- your-command
 ```
 
-After the package is present in pnpm's local store, a locked checkout
-can use `pnpm install --offline --frozen-lockfile` followed by
-`pnpm exec nopeek ...`. A compromised package, dependency, shell,
-child process, or user account is outside nopeek's protection.
-
-npm trusted-publishing provenance is not currently enabled because
-this repository uses a maintainer-run Changesets publish command
-rather than an OIDC release workflow. CI instead builds, installs, and
-executes the packed artifact to catch packaging regressions;
-provenance should only be enabled alongside a reviewed
-trusted-publishing workflow.
+After installation, `pnpm install --offline --frozen-lockfile` can use
+packages already in the local store. A compromised package,
+dependency, child command, or user account is outside nopeek's
+protection. CI builds, installs, and executes the packed artifact; npm
+trusted-publishing provenance is not currently enabled.
 
 ## Commands
 
-### `load` - Load secrets from .env or .tfvars files
+### `run` — Run one command with selected secrets
 
 ```bash
-npx nopeek load .env
-npx nopeek load .env --only DATABASE_URL,API_KEY
-npx nopeek load .env --shell bash --allow-values  # trusted shells only
-npx nopeek load .env --only API_KEY --persist  # explicit global plaintext storage; no auto-loading
-npx nopeek load terraform.tfvars --only prod_password
-npx nopeek load production.tfvars.json --only db_password
+pnpx nopeek run .env --only API_KEY -- node ./script.js
+pnpx nopeek run .env --only API_KEY,DATABASE_URL -- node ./worker.js
+pnpx nopeek run terraform.tfvars --only prod_password -- ./deploy.sh
+pnpx nopeek run production.tfvars.json --only DATABASE_URL -- node ./query.js
 ```
 
-Supported files use deliberately strict, fail-closed grammars. A
-malformed or unsupported value rejects the whole file before `--only`
-filtering or any secret-loading side effect.
+- `--only` selects comma-separated keys from the input file. Without
+  it, all parsed entries are supplied.
+- The entire source is parsed and validated before key selection or
+  child execution. Malformed input fails without printing its values.
+- Secrets are passed in the child process environment, not generated
+  shell assignments, temporary files, or a persistent store.
+- The child inherits the parent environment. **`--only` does not
+  remove already-inherited credentials.** Start from a clean session.
+- Child stdout and stderr pass through unchanged; nopeek preserves its
+  exit code. Descendants can inherit the credentials.
+- The command is executed directly, without implicit shell expansion.
+  Use `sh -c` only when shell features are needed. Expanding a token
+  into another program's arguments can expose it in process listings;
+  prefer native environment-based authentication.
+- No other agent tool call or later command receives the loaded values
+  automatically. Run each authenticated command through nopeek.
 
-- **`.env` and `.env.*`:** blank lines, `#` comment lines, and
-  `[export ]NAME=VALUE` assignments are supported. Names match
-  `[A-Za-z_][A-Za-z0-9_]*`; `export` is recognized only as a separate
-  prefix, so `export`, `exported`, and `export_token` remain valid
-  names. Whitespace around `=` and CRLF are accepted. Values may be
-  unquoted, single quoted (literal), or double quoted with `\\`, `\"`,
-  `\n`, `\r`, and `\t` escapes. In unquoted values, `#` starts a
-  comment only after whitespace; a value-leading `#` and `#` inside
-  either quote style are data. A closed quoted value may only be
-  followed by whitespace or a whitespace-prefixed `#` comment.
-  Duplicate names, prototype-sensitive output names (`__proto__`,
-  `prototype`, `constructor`), a UTF-8 BOM, expansion, multiline
-  values, unknown escapes, malformed quotes, and other shell syntax
-  are rejected.
+### Supported source files
+
+Supported files use deliberately strict, fail-closed grammars:
+
+- **`.env` and `.env.*`:** blank lines, `#` comments, and
+  `[export ]NAME=VALUE` assignments. Names match
+  `[A-Za-z_][A-Za-z0-9_]*`. Whitespace around `=` and CRLF are
+  accepted. Values may be unquoted, single quoted (literal), or double
+  quoted with `\\`, `\"`, `\n`, `\r`, and `\t` escapes. Unquoted `#`
+  starts a comment only after whitespace. Repeated keys use the last
+  value and warn for selected keys. Expansion, multiline values,
+  unknown escapes, malformed quotes, a BOM, and prototype-sensitive
+  names are rejected.
 - **`.tfvars`:** top-level assignments and nested object/map
-  assignments are supported when every leaf is a double-quoted string.
-  Identifier or quoted keys, `#`/`//` line comments,
-  whitespace-separated multiline or same-line maps, and the same basic
-  escapes as above are accepted. Nested leaf names are flattened to
-  their leaf key for environment loading; duplicate assignments,
-  prototype-sensitive leaf names, or any resulting leaf-key collision
-  reject the file. Commas, heredocs, interpolation, expressions,
-  references, functions, dynamic keys, lists, numbers, booleans, null,
-  multiline strings, and a BOM are rejected.
-- **`.tfvars.json`:** the root must be a JSON object whose leaves are
-  strings; nested objects use the same collision-checked leaf-key
-  flattening. Only JSON whitespace (space, tab, CR, LF) is accepted.
-  Duplicate members at any depth, prototype-sensitive leaf names,
-  flattened collisions, arrays, numbers, booleans, null, trailing
-  content, and a BOM are rejected.
+  assignments with double-quoted string leaves. Nested leaf names are
+  flattened to environment names. Duplicate assignments or resulting
+  name collisions are rejected, as are interpolation, expressions,
+  lists, non-string leaves, heredocs, multiline strings, commas, and a
+  BOM.
+- **`.tfvars.json`:** a JSON object with string leaves, flattened
+  using the same collision rules. Duplicate members, non-string
+  leaves, arrays, trailing content, a BOM, and prototype-sensitive
+  leaf names are rejected.
 
-The `--persist` flag requires `--only` with explicit key names and
-saves those keys to `~/.config/nopeek/config.json`. Storage remains
-global, plaintext, and not project-scoped. It does not enable
-automatic loading; `run` reads the requested file, not stored keys.
-`set`, persisted `load`, and `status` with stored keys warn about this
-boundary and older plugins.
+These parsers do not evaluate shell code, Terraform expressions, or
+variable interpolation.
 
-`load` returns `method` and `contains_values` fields in JSON output.
-Structured JSON never contains values. `available_to_future_commands`
-is always false: the former `env_file` delivery mode has been removed.
-`source_file` returns a path to source in the same shell as the
-command; never inline the file's contents or append it to a session
-env file. `name_only` may return an explicitly gated `next_command`,
-for example:
+### `init` — Audit cloud CLI authentication
 
 ```bash
-eval "$(npx nopeek load .env --shell bash --allow-values)"
-source <(npx nopeek load .env --shell bash --allow-values)
-npx nopeek load .env --shell fish --allow-values | source
+pnpx nopeek init
+pnpx nopeek init --no-json
 ```
 
-`--shell` supports `bash`, `zsh`, and `fish`, but assignment output
-requires the explicit `--allow-values` opt-in. `--shell` takes
-precedence over `--json`: that combination emits raw shell
-assignments, not JSON. This mode warns on stderr and writes secret
-values to stdout for a shell to consume. Detected LLM agent sessions
-reject `--allow-values`; prefer `run`, or explicitly source the
-generated source file in the shell running your command instead.
-Without opt-in, non-JSON output is name-only even in unknown non-TTY
-harnesses.
+Detects supported cloud CLIs and reports whether their authentication
+needs migration. This is advisory: nopeek does not change CLI
+configuration, read or write its old global store, or apply profiles
+to commands.
 
-### `run` - Run one command with loaded secrets
+| CLI      | Suggested native authentication                      |
+| -------- | ---------------------------------------------------- |
+| `aws`    | Named profiles (`AWS_PROFILE`)                       |
+| `hcloud` | Named contexts (`HCLOUD_CONTEXT`)                    |
+| `gcloud` | Named configurations (`CLOUDSDK_ACTIVE_CONFIG_NAME`) |
+| `az`     | Cached Azure CLI login and selected subscription     |
 
-```bash
-npx nopeek run .env --only API_KEY -- node ./script.js
-npx nopeek run .env --only INGEST_TOKEN,FEEDGEN_SERVICE_URL -- node ./scripts/ingest.js
-npx nopeek run terraform.tfvars --only prod_password -- ./deploy.sh
-npx nopeek run production.tfvars.json --only DATABASE_URL -- node ./scripts/query-database.js
-```
+Configure profiles directly with the relevant CLI. Remove obsolete
+inline credentials from shell startup files, open a fresh shell, and
+rerun `nopeek init`. Native CLI credential files remain managed by
+those CLIs, not nopeek.
 
-`run` adds selected keys to the child process environment and
-preserves the child command exit code. Descendants can inherit those
-keys. **`--only` filters the input file, not the inherited parent
-environment.** It neither sanitizes a contaminated session nor reads
-the global key store. Start from a clean session; use native
-environment-based client auth.
-
-Use `sh -c` for pipes or redirects only when needed. Expanding
-`$TOKEN` into a child program's arguments exposes its value in process
-listings, even when the outer command contained only a variable name.
-A child can also disclose values through stdout, stderr, tracing, or
-files. `run` is not an output redactor, environment sandbox, or secret
-broker.
-
-### `set` - Store a secret key
+### `audit` — Scan secret files and Git coverage
 
 ```bash
-npx nopeek set MY_API_KEY --from-env  # read from current shell env
-npx nopeek set MY_API_KEY             # interactive prompt (TTY only)
-```
-
-Stores to `~/.config/nopeek/config.json` with `0600` permissions
-inside an owned `0700` directory. nopeek rejects symlinks, wrong
-ownership, non-regular files, corrupt JSON, and invalid config
-structure without overwriting the original. Missing config reads do
-not create directories. Safe owned permission drift is repaired
-through verified file descriptors, and destinations are revalidated
-immediately before atomic replacement. These checks do not protect
-against a process running as the same user racing the final filesystem
-operation. This is plaintext at rest; use `set`/`--persist` only for
-secrets you are comfortable storing in your user config.
-
-> **Note:** `--value` is rejected inside detected LLM agent sessions.
-> The value would appear in the conversation. Use `--from-env`
-> instead.
-
-### `list` - Show available keys
-
-```bash
-npx nopeek list
-```
-
-Shows key names and sources without values.
-
-### `remove` - Remove a stored key
-
-```bash
-npx nopeek remove MY_API_KEY
-```
-
-### `init` - Audit cloud CLI authentication
-
-```bash
-npx nopeek init
-```
-
-Detects installed cloud CLIs and reports whether their current
-authentication needs migration. This command is advisory: it does not
-change cloud CLI configuration, and `run`/`load` do not apply cloud
-profiles. Older nopeek versions stored unused profile mappings;
-running `init` removes those obsolete entries without affecting
-credentials or the cloud CLIs themselves.
-
-For a reported migration, configure the relevant CLI directly, remove
-the inline credential from your shell startup files, open a fresh
-shell, and rerun `nopeek init`:
-
-- AWS: `aws configure --profile <name>`, then set
-  `AWS_PROFILE=<name>`.
-- hcloud: `hcloud context create <name>`, then use
-  `hcloud context use <name>`.
-- gcloud: `gcloud config configurations create <name>`, then use
-  `gcloud config configurations activate <name>`.
-- Azure: sign in with `az login`; select the account with
-  `az account set --subscription <name-or-id>`.
-
-| CLI      | Safer pattern                                        | Detection                                          |
-| -------- | ---------------------------------------------------- | -------------------------------------------------- |
-| `aws`    | Named profiles (`AWS_PROFILE`)                       | `~/.aws/credentials` + env vars                    |
-| `hcloud` | Named contexts (`HCLOUD_CONTEXT`)                    | `~/.config/hcloud/cli.toml`                        |
-| `gcloud` | Named configurations (`CLOUDSDK_ACTIVE_CONFIG_NAME`) | active gcloud account + inline credential env vars |
-| `az`     | Azure CLI cached login + active subscription         | `az account show` + inline credential env vars     |
-
-### `status` - Show current state
-
-```bash
-npx nopeek status
-```
-
-Shows session type, stored keys, and detected CLIs. A legacy
-`CLI profiles` section may appear until `nopeek init` removes mappings
-written by older versions; those mappings are never applied to
-commands.
-
-### `audit` - Scan for exposed secrets
-
-```bash
-npx nopeek audit
-npx nopeek audit ./path/to/dir
+pnpx nopeek audit
+pnpx nopeek audit ./path/to/dir
+pnpx nopeek audit --no-json
 ```
 
 Recursively scans `.env*`, `.tfvars`, and `.tfvars.json` files and
-reports pattern categories (AWS keys, bearer tokens, API keys, private
-keys, connection strings, etc.) without printing matched values. It
-uses Git itself for nested `.gitignore` rules and negation, and
-reports each source as `tracked`, `untracked`, `ignored`, or
-`unknown`. `unknown` is used outside a repository, when Git is
-unavailable, or when classification fails. Example, sample, and
-template files are not assumed safe: files whose parsed values look
-live or whose contents match known secret patterns are flagged, while
-a narrow set of obvious whole-value placeholders is reported as a
-heuristic placeholder assessment.
+reports secret-pattern categories without printing matched values. Git
+classification uses Git itself, including nested ignore rules and
+negation: sources are `tracked`, `untracked`, `ignored`, or `unknown`.
+Example, sample, and template filenames are not assumed safe.
 
 The scan is a bounded heuristic, not proof that a repository is safe.
 It does not follow symlinks; skips dependency, build, VCS metadata,
@@ -324,169 +165,93 @@ and framework output directories; visits at most 10,000 directories to
 a depth of 32; examines at most 1,000 candidates; and reads at most 1
 MiB per file. Unreadable, binary, oversized, malformed, symlinked, or
 limit-exceeding candidates are reported without source contents and
-make the scan fail closed. Only supported secret-source filenames and
-known secret patterns are checked.
+make the scan fail closed.
 
-## Security
+Advisory commands output JSON by default; `--no-json` selects text.
+`run` forwards the child's output rather than wrapping it in JSON.
 
-- **Key name validation** - env key names are validated against
-  `^[a-zA-Z_][a-zA-Z0-9_]*$` to prevent shell injection
-- **Secure file permissions** - config dir is `0700`, config file is
-  `0600`, temp env files are `0600`
-- **Atomic writes** - config is written via temp file + rename to
-  prevent corruption
-- **Key validation before output** - invalid env names are rejected
-  before shell exports are printed
-- **Name-only normal status output** - `run` and default
-  detected-agent loading report names/state rather than values;
-  explicit shell-output modes and child commands can still print
-  values
-- **Plaintext config warning** - persisted keys are local plaintext
-  secrets protected by file permissions, not encryption
+## Threat model
 
-## Recommended Agent Deny Rules
+nopeek is designed for a cooperative agent avoiding accidental secret
+exposure while running authenticated commands. It avoids a common
+intermediate mistake: reading or printing an entire secret file just
+to run one command.
 
-nopeek is a workflow control, not an access-control boundary. Deny
-rules are the enforcement layer in runtimes that support them. Use
-them to block agents from reading secret files or embedding
-credentials inline in commands:
+It does **not** protect against:
 
-```jsonc
-{
-	"permissions": {
-		"deny": [
-			// Block reading secret files
-			"Read(.env)",
-			"Read(*.env)",
-			"Read(*.tfvars)",
-			"Read(*credentials*)",
-			"Read(*secret*)",
-			"Read(**/.config/gcloud/**)",
-			"Read(**/.azure/**)",
-			"Read(*service-account*.json)",
+- An agent reading the original secret file or printing its
+  environment.
+- A child logging credentials, tracing commands, writing secrets to
+  files, or expanding them into arguments.
+- Inherited credentials from an already-contaminated session.
+- Same-user or privileged processes with access to files or process
+  environments, where the OS permits it.
+- A compromised package, dependency, shell, child, or user account.
 
-			// Block cat/head on secret files
-			"Bash(cat .env)",
-			"Bash(cat *.env*)",
-			"Bash(cat *tfvars*)",
-			"Bash(cat *credentials*)",
-			"Bash(cat *secret*)",
+Use your harness's filesystem/sandbox controls to restrict direct
+secret-file access where supported. Separate tool-result redaction can
+reduce accidental disclosure but is best-effort, not a replacement for
+access control. Pattern-based `audit` detection cannot find every
+secret.
 
-			// Block inline credentials in commands
-			"Bash(PGPASSWORD*)",
-			"Bash(*HCLOUD_TOKEN*)",
-			"Bash(hcloud context create*)",
-			"Bash(*GOOGLE_APPLICATION_CREDENTIALS*)",
-			"Bash(*CLOUDSDK_AUTH_ACCESS_TOKEN*)",
-			"Bash(*GOOGLE_OAUTH_ACCESS_TOKEN*)",
-			"Bash(*AZURE_CLIENT_SECRET*)",
-			"Bash(*ARM_CLIENT_SECRET*)",
-			"Bash(*AZURE_PASSWORD*)",
-			"Bash(*AZURE_ACCESS_TOKEN*)",
-			"Bash(*ARM_ACCESS_KEY*)",
+## Migrating from older versions
 
-			// Block fetching secret values from cloud providers
-			"Bash(*secretsmanager get-secret-value*)",
-			"Bash(*hetzner*secret*)",
-			"Bash(*hetzner*access_key*)",
-			"Bash(gcloud auth print-access-token*)",
-			"Bash(gcloud auth application-default print-access-token*)",
-			"Bash(az account get-access-token*)",
-		],
-	},
-}
-```
+**Breaking change:** `load`, `set`, `list`, `remove`, `status`, and
+`template` have been removed. They fail with guidance to use `run`.
+There is no persistent key store, temporary env-file loader, shell
+assignment output, or template rendering that writes resolved secrets.
 
-Without these rules, an agent can still read a `.tfvars` or `.env`
-file directly and hardcode or print the values. Deny rules reduce that
-access; nopeek gives cooperative agents a practical alternative.
-
-## Threat Model and Non-Goals
-
-nopeek is designed for a cooperative coding agent that needs to run a
-command with credentials while avoiding accidental disclosure during
-loading. It protects against common mistakes such as pasting a value
-into chat, reading an entire `.env` file for one key, or printing
-exports as an intermediate step when `run` is used.
-
-nopeek does **not** protect secrets from:
-
-- an agent that deliberately reads the source file or prints variables
-- a child command that dumps its environment, traces commands, or logs
-  credentials
-- a compromised nopeek package, dependency, shell, child process, or
-  user account
-- another process with sufficient access to the same user-owned files
-
-Additional limitations:
-
-- **Pattern-based secret detection is best-effort.** `audit` performs
-  a bounded scan of `.env*`, `.tfvars`, and `.tfvars.json` sources for
-  known patterns and cannot identify every secret or prove a file
-  safe.
-- **Agent detection is marker-based.** An unknown harness may be
-  treated like a regular shell; check `nopeek status` and avoid
-  assignment-emitting modes in agent-visible output.
-- **Temp files are briefly plaintext.** `source_file` writes values to
-  a unique `0600` file under the verified per-user `0700` directory
-  `<os.tmpdir()>/nopeek-<uid>/`. The file removes itself after it is
-  sourced; interrupted-session files older than 24 hours are removed
-  safely on a later write, with only the removal count reported.
-  nopeek refuses unsafe roots and never follows symlinks during
-  cleanup. Files created by older versions under `/tmp/nopeek/` are
-  intentionally not touched; inspect and remove that legacy directory
-  manually after upgrading.
-- **Persisted keys are global plaintext.** `set` and
-  `load --persist --only KEY` store values in
-  `~/.config/nopeek/config.json` with `0600` permissions. They are not
-  automatically loaded or project-scoped.
-- **Redaction is separate and best-effort.** Standalone nopeek does
-  not redact arbitrary child output. Harness integrations such as
-  my-pi may add a separate safety net, but cannot guarantee complete
-  redaction.
-
-## Migrating from session-wide loading
-
-Update **both** the CLI and Claude plugin. Updating only the CLI
-cannot stop an older plugin reading global config directly. Disable
-any legacy SessionStart registration, restart affected sessions and
-their child processes, and rotate credentials exposed in tool output
-or transcripts. Removing a stored key does not clear existing
-environments or artifacts. Review and clean up old session env files,
-shell histories, and transcripts without printing their values; nopeek
-does not delete those automatically.
-
-Old `env_file` consumers must switch to `run` or explicitly handle
-`source_file`. Callers of `load --persist` must now supply `--only`.
-No stored data is deleted or automatically migrated. Use `list` and
-`remove KEY` to review and remove obsolete persisted entries.
-
-The [cross-agent security assessment](docs/agent-secret-boundaries.md)
-compares verified sources, explains the remaining boundaries, and
-records which guarantees are tested versus documented by other
-vendors.
-
-## Security integration tests
+Replace `load` followed by a command with:
 
 ```bash
-pnpm run build
+pnpx nopeek run .env --only REQUIRED_KEY -- your-command
+```
+
+Keep your original secret source file. nopeek no longer reads, writes,
+migrates, or deletes legacy storage. Review these old plaintext
+locations manually without printing their contents:
+
+- `$XDG_CONFIG_HOME/nopeek/config.json`, or
+  `~/.config/nopeek/config.json` when XDG_CONFIG_HOME is unset.
+- Leftover `.tmp-*` files in that config directory.
+- `<os.tmpdir()>/nopeek-<uid>/env-*.sh` and older
+  `<os.tmpdir()>/nopeek/` files.
+
+These files are **not automatically cleaned up**. Review and
+explicitly remove obsolete files yourself after retaining any
+credentials you still need; removing a file is not secure erasure or
+credential revocation.
+
+Update or disable old plugins, skills, and SessionStart hooks: an old
+plugin may still read global storage independently of this CLI.
+Restart affected sessions and child processes. Rotate credentials
+exposed in transcripts, logs, arguments, or other artifacts. Upgrading
+nopeek does not erase existing copies or clear inherited environments.
+
+The [earlier cross-agent assessment](docs/agent-secret-boundaries.md)
+is retained as a historical record, not a description of the current
+command surface or current vendor guarantees.
+
+## Development and validation
+
+```bash
+pnpm test
+pnpm run check
 pnpm run test:integration
 ```
 
-The integration suite executes the built CLI in isolated home, config,
-temporary, env-file, and working directories. Bash is required for the
-portable CI subset. Zsh and fish assignment tests run when those
-shells are installed and otherwise appear as explicit skips. A
-separate Ubuntu release-gating job installs and requires bash, zsh,
-and fish, then runs the built-CLI assignment round-trip and canary
-assertions for all three; a missing supported shell fails that job.
-POSIX permission checks remain platform-dependent. Tests use synthetic
-canaries, timeouts, and cleanup rather than real credentials.
+The integration suite runs the built CLI with synthetic credentials in
+isolated working, home, config, and temporary directories. It checks
+that `run` creates no extra files, leaves legacy storage and
+session-env targets untouched, rejects retired commands, preserves
+exit status and literal arguments, and keeps secrets out of process
+arguments. Linux `/proc` checks have a deliberate-exposure positive
+control. The tests also preserve the explicit limitations: parent
+credentials are inherited and deliberate child output is not redacted.
 
-The `run` tests distinguish nopeek output from deliberate child
-output. A child explicitly instructed to print its injected
-environment can print a canary; that controlled child channel is
-outside nopeek's normal-output secrecy guarantee.
+No additional shell is required for assignment round trips: shell
+assignment output has been removed. CI also installs and exercises the
+packed CLI.
 
 ## License
 

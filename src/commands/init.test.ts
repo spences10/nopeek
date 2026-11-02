@@ -1,29 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NopeekConfig } from '../core/config.js';
 
-const config: NopeekConfig = {
-	keys: {},
-	cli_profiles: { aws: { profile: 'legacy' } },
-};
-const write_config = vi.fn();
 const scan_all = vi.fn();
-
-vi.mock('../core/config.js', () => ({
-	read_config: () => config,
-	write_config,
-}));
 vi.mock('../detectors/index.js', () => ({ scan_all }));
 
 const { init_command } = await import('./init.js');
 
 describe('init_command', () => {
 	beforeEach(() => {
-		config.cli_profiles = { aws: { profile: 'legacy' } };
-		write_config.mockClear();
 		scan_all.mockReset();
+		vi.restoreAllMocks();
 	});
 
-	it('is advisory and removes obsolete stored profile mappings', async () => {
+	it('reports cloud authentication without managing stored profiles', async () => {
 		scan_all.mockResolvedValue([
 			{
 				name: 'aws',
@@ -34,25 +22,55 @@ describe('init_command', () => {
 				profile: 'current',
 			},
 		]);
-
 		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
 		await init_command(true);
 
-		expect(config.cli_profiles).toEqual({});
-		expect(write_config).toHaveBeenCalledWith(config);
-		expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({
+		expect(JSON.parse(String(log.mock.calls[0][0]))).toEqual({
 			advisory: true,
-			removed_legacy_profiles: 1,
+			detected: [
+				{
+					name: 'aws',
+					version: '2.0',
+					status: 'ok',
+					detail: 'using named profile "current" [OK]',
+					profile: 'current',
+				},
+			],
+			migrations: [],
 		});
-		log.mockRestore();
 	});
 
-	it('does not rewrite config when there are no legacy mappings', async () => {
-		config.cli_profiles = {};
-		scan_all.mockResolvedValue([]);
+	it('reports required migrations as advice', async () => {
+		scan_all.mockResolvedValue([
+			{
+				name: 'aws',
+				version: '2.0',
+				status: 'migrate',
+				detail: 'inline credentials detected',
+			},
+		]);
+		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
 		await init_command(true);
 
-		expect(write_config).not.toHaveBeenCalled();
+		expect(
+			JSON.parse(String(log.mock.calls[0][0])).migrations,
+		).toEqual([
+			{ cli: 'aws', detail: 'inline credentials detected' },
+		]);
+	});
+
+	it('handles a scan with no supported CLIs', async () => {
+		scan_all.mockResolvedValue([]);
+		const stderr = vi
+			.spyOn(console, 'error')
+			.mockImplementation(() => {});
+
+		await init_command(false);
+
+		expect(stderr).toHaveBeenCalledWith(
+			'  No supported cloud CLIs found.',
+		);
 	});
 });
